@@ -22,9 +22,9 @@ class DiscGolfClient {
     }
 
     private var serverIp: String? = null
-    private var serverPort: Int = 8080
+    private var serverPort: Int = 8347
 
-    fun setServer(ip: String, port: Int = 8080) {
+    fun setServer(ip: String, port: Int = 8347) {
         serverIp = ip
         serverPort = port
     }
@@ -34,7 +34,7 @@ class DiscGolfClient {
         return "http://$ip:$serverPort"
     }
 
-    suspend fun ping(serverIp: String, port: Int = 8080): Result<PingResponse> {
+    suspend fun ping(serverIp: String, port: Int = 8347): Result<PingResponse> {
         return try {
             val response: PingResponse = httpClient.get("http://$serverIp:$port/ping").body()
             this.serverIp = serverIp

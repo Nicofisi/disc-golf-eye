@@ -139,6 +139,6 @@ class ServerService : Service(), LifecycleOwner {
         const val ACTION_STOP_SERVER = "si.nicofi.discgolfeye.STOP_SERVER"
         const val CHANNEL_ID = "discgolfeye_server_channel"
         const val NOTIFICATION_ID = 1
-        const val PORT = 8080
+        const val PORT = 8347
     }
 }

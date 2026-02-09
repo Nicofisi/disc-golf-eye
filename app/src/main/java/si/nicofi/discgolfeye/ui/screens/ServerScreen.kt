@@ -1,14 +1,21 @@
 package si.nicofi.discgolfeye.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,10 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.FpsOption
@@ -433,6 +438,75 @@ fun ServerScreen(
                 Text("Zatrzymywanie...")
             } else {
                 Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Przyciski pomocnicze: Hotspot i Screen Pinning
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Przycisk Hotspot
+            OutlinedButton(
+                onClick = {
+                    // Otwórz ustawienia hotspotu
+                    try {
+                        val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback do ogólnych ustawień
+                        val intent = Intent(Settings.ACTION_SETTINGS)
+                        context.startActivity(intent)
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    Icons.Default.Wifi,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Hotspot", style = MaterialTheme.typography.bodySmall)
+            }
+
+            // Przycisk Screen Pinning
+            OutlinedButton(
+                onClick = {
+                    val activity = context as? Activity
+                    if (activity != null) {
+                        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                        if (activityManager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
+                            // Przypnij ekran
+                            activity.startLockTask()
+                            Toast.makeText(context, "Aplikacja przypięta! Przytrzymaj ◀ i ▢ aby odpiąć.", Toast.LENGTH_LONG).show()
+                        } else {
+                            // Odepnij ekran
+                            activity.stopLockTask()
+                            Toast.makeText(context, "Aplikacja odpięta", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // Otwórz ustawienia screen pinning
+                        try {
+                            val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
+                            context.startActivity(intent)
+                            Toast.makeText(context, "Włącz 'Przypinanie ekranu' w ustawieniach", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Otwórz Ustawienia → Bezpieczeństwo → Przypinanie ekranu", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    Icons.Default.PushPin,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Przypnij", style = MaterialTheme.typography.bodySmall)
             }
         }
 

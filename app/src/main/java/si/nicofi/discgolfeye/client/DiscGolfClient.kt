@@ -17,6 +17,24 @@ data class PingResponse(
     val message: String
 )
 
+@Serializable
+data class VideoFileInfo(
+    val filename: String,
+    val timestamp: Long,
+    val sizeMb: Float,
+    val videoUrl: String
+)
+
+@Serializable
+data class DeviceStatus(
+    val state: String,
+    val batteryLevel: Int,
+    val batteryTemp: Float,
+    val storageFreeGb: Float,
+    val isRecording: Boolean,
+    val uptimeSeconds: Long
+)
+
 class DiscGolfClient {
 
     private val httpClient = HttpClient(Android) {
@@ -25,13 +43,63 @@ class DiscGolfClient {
         }
     }
 
+    private var serverIp: String? = null
+    private var serverPort: Int = 8080
+
+    fun setServer(ip: String, port: Int = 8080) {
+        serverIp = ip
+        serverPort = port
+    }
+
+    fun getServerBaseUrl(): String? {
+        val ip = serverIp ?: return null
+        return "http://$ip:$serverPort"
+    }
+
     suspend fun ping(serverIp: String, port: Int = 8080): Result<PingResponse> {
         return try {
             val response: PingResponse = httpClient.get("http://$serverIp:$port/ping").body()
+            this.serverIp = serverIp
+            this.serverPort = port
             Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun getStatus(): Result<DeviceStatus> {
+        val baseUrl = getServerBaseUrl() ?: return Result.failure(Exception("Not connected"))
+        return try {
+            val response: DeviceStatus = httpClient.get("$baseUrl/status").body()
+            Result.success(response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getVideos(): Result<List<VideoFileInfo>> {
+        val baseUrl = getServerBaseUrl() ?: return Result.failure(Exception("Not connected"))
+        return try {
+            val response: List<VideoFileInfo> = httpClient.get("$baseUrl/videos").body()
+            Result.success(response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun triggerFlush(): Result<String> {
+        val baseUrl = getServerBaseUrl() ?: return Result.failure(Exception("Not connected"))
+        return try {
+            val response: Map<String, String> = httpClient.post("$baseUrl/trigger-flush").body()
+            Result.success(response["lastFile"] ?: "unknown")
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun getVideoStreamUrl(filename: String): String? {
+        val baseUrl = getServerBaseUrl() ?: return null
+        return "$baseUrl/stream/$filename"
     }
 
     fun close() {

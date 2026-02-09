@@ -12,6 +12,7 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.partialcontent.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.CoroutineScope
@@ -64,6 +65,9 @@ class VideoServer(
             server = embeddedServer(Netty, port = port) {
                 install(ContentNegotiation) {
                     json()
+                }
+                install(PartialContent) {
+                    maxRangeCount = 10
                 }
 
                 routing {
@@ -144,6 +148,7 @@ class VideoServer(
                             call.respond(HttpStatusCode.NotFound, "File not found")
                             return@get
                         }
+                        call.response.header(HttpHeaders.ContentType, ContentType.Video.MP4.toString())
                         call.respondFile(file)
                     }
                 }

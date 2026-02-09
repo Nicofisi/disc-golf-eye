@@ -220,7 +220,9 @@ class DownloadService : Service() {
             .build()
 
     private fun showCompletedNotification(notificationId: Int, filename: String, fileUri: Uri?) {
-        // Anuluj powiadomienie z postępem
+        // Zatrzymaj foreground i usuń powiadomienie z postępem
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
         val manager = getSystemService(NotificationManager::class.java)
         manager.cancel(notificationId)
 
@@ -257,6 +259,8 @@ class DownloadService : Service() {
     }
 
     private fun showErrorNotification(notificationId: Int, filename: String, error: String) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
         val manager = getSystemService(NotificationManager::class.java)
         manager.cancel(notificationId)
 

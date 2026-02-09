@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings
+import android.net.wifi.WifiManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -443,37 +444,79 @@ fun ServerScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Sprawdź stan pinningu
+        // Sprawdź stan pinningu i hotspotu
         val activityManager = remember { context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager }
         var isPinned by remember { mutableStateOf(activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) }
+
+        // Sprawdź czy hotspot jest włączony (odświeżaj co sekundę gdy serwer działa)
+        var isHotspotEnabled by remember { mutableStateOf(false) }
+        LaunchedEffect(isServerRunning) {
+            while (true) {
+                try {
+                    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                    // Używamy reflection bo isWifiApEnabled nie jest publiczne
+                    val method = wifiManager.javaClass.getDeclaredMethod("isWifiApEnabled")
+                    method.isAccessible = true
+                    isHotspotEnabled = method.invoke(wifiManager) as Boolean
+                } catch (e: Exception) {
+                    // Nie udało się sprawdzić - zakładamy że wyłączony
+                    isHotspotEnabled = false
+                }
+                delay(2000)
+            }
+        }
 
         // Przyciski pomocnicze: Hotspot i Screen Pinning
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Przycisk Hotspot
-            OutlinedButton(
-                onClick = {
-                    // Otwórz ustawienia hotspotu
-                    try {
-                        val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        // Fallback do ogólnych ustawień
-                        val intent = Intent(Settings.ACTION_SETTINGS)
-                        context.startActivity(intent)
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    Icons.Default.Wifi,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Hotspot", style = MaterialTheme.typography.bodySmall)
+            // Przycisk Hotspot - zmienia wygląd gdy aktywny
+            if (isHotspotEnabled) {
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = Intent(Settings.ACTION_SETTINGS)
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        Icons.Default.Wifi,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Hotspot ✓", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = Intent(Settings.ACTION_SETTINGS)
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        Icons.Default.Wifi,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Hotspot", style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             // Przycisk Screen Pinning - zmienia wygląd gdy przypięty
@@ -483,7 +526,6 @@ fun ServerScreen(
                         val activity = context as? Activity
                         activity?.stopLockTask()
                         isPinned = false
-                        Toast.makeText(context, "Aplikacja odpięta", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
@@ -505,14 +547,12 @@ fun ServerScreen(
                         if (activity != null) {
                             activity.startLockTask()
                             isPinned = true
-                            Toast.makeText(context, "Aplikacja przypięta! Przytrzymaj ◀ i ▢ aby odpiąć.", Toast.LENGTH_LONG).show()
                         } else {
                             try {
                                 val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
                                 context.startActivity(intent)
-                                Toast.makeText(context, "Włącz 'Przypinanie ekranu' w ustawieniach", Toast.LENGTH_LONG).show()
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Otwórz Ustawienia → Bezpieczeństwo → Przypinanie ekranu", Toast.LENGTH_LONG).show()
+                                // Ignoruj
                             }
                         }
                     },

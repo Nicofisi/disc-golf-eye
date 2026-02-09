@@ -1,10 +1,15 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Environment
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
@@ -396,6 +402,28 @@ private fun VideoPlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // Sprawdź uprawnienia do powiadomień (Android 13+)
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+        if (isGranted) {
+            downloadWithNotification(context, videoUrl, videoName)
+            Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // Obsługa gestu cofania
     BackHandler(onBack = onBack)
 
@@ -425,8 +453,12 @@ private fun VideoPlayerScreen(
             // Przycisk pobierania
             IconButton(
                 onClick = {
-                    downloadWithNotification(context, videoUrl, videoName)
-                    Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        downloadWithNotification(context, videoUrl, videoName)
+                        Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+                    }
                 }
             ) {
                 Text("⬇️", style = MaterialTheme.typography.headlineSmall)

@@ -1,19 +1,8 @@
 package si.nicofi.discgolfeye.ui.screens
 
-import android.Manifest
-import android.app.PendingIntent
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,9 +22,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -46,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.client.DiscGolfClient
+import si.nicofi.discgolfeye.client.DownloadService
 import si.nicofi.discgolfeye.shared.DeviceStatus
 import si.nicofi.discgolfeye.shared.VideoFileInfo
 import si.nicofi.discgolfeye.ui.components.VideoPlayer
@@ -425,40 +411,12 @@ private fun VideoPlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var isCurrentlyDownloading by remember { mutableStateOf(false) }
-
-    // Sprawdź uprawnienia do powiadomień (Android 13+)
-    var hasNotificationPermission by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-            } else true
-        )
-    }
 
     // Nazwa pliku z datą
     val downloadFilename = remember(videoName) {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd_", Locale.getDefault())
         val date = dateFormat.format(Date())
         "$date$videoName"
-    }
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasNotificationPermission = isGranted
-        if (!isDownloading()) {
-            isCurrentlyDownloading = true
-            GlobalScope.launch {
-                downloadToGallery(context, videoUrl, downloadFilename, isGranted)
-                withContext(Dispatchers.Main) {
-                    isCurrentlyDownloading = false
-                }
-            }
-        }
     }
 
     // Obsługa gestu cofania
@@ -490,37 +448,15 @@ private fun VideoPlayerScreen(
             // Przycisk pobierania
             IconButton(
                 onClick = {
-                    if (isDownloading() || isCurrentlyDownloading) {
-                        Toast.makeText(context, "Trwa już pobieranie...", Toast.LENGTH_SHORT).show()
-                        return@IconButton
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        isCurrentlyDownloading = true
-                        GlobalScope.launch {
-                            downloadToGallery(context, videoUrl, downloadFilename, hasNotificationPermission)
-                            withContext(Dispatchers.Main) {
-                                isCurrentlyDownloading = false
-                            }
-                        }
-                    }
-                },
-                enabled = !isCurrentlyDownloading
-            ) {
-                if (isCurrentlyDownloading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = "Pobierz",
-                        tint = Color.White
-                    )
+                    DownloadService.startDownload(context, videoUrl, downloadFilename)
+                    Toast.makeText(context, "Pobieranie w tle...", Toast.LENGTH_SHORT).show()
                 }
+            ) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Pobierz",
+                    tint = Color.White
+                )
             }
 
             // Przycisk udostępniania
@@ -553,189 +489,6 @@ private fun VideoPlayerScreen(
     }
 }
 
-private const val DOWNLOAD_CHANNEL_ID = "discgolfeye_download"
-private var currentDownloadId: Int? = null
-private var nextNotificationId = 1001
-
-private fun getNextNotificationId(): Int {
-    return nextNotificationId++
-}
-
-private fun isDownloading(): Boolean = currentDownloadId != null
-
-private fun canShowNotification(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-    } else {
-        true
-    }
-}
-
-private fun safeNotify(context: Context, notificationManager: NotificationManagerCompat, id: Int, builder: NotificationCompat.Builder) {
-    if (canShowNotification(context)) {
-        try {
-            notificationManager.notify(id, builder.build())
-        } catch (e: SecurityException) {
-            // Uprawnienia odebrane w trakcie - kontynuuj pobieranie bez powiadomień
-            android.util.Log.w("DiscGolfEye", "Notification permission revoked: ${e.message}")
-        }
-    }
-}
-
-private suspend fun downloadToGallery(
-    context: Context,
-    videoUrl: String,
-    filename: String,
-    showNotification: Boolean
-) {
-    val notificationManager = NotificationManagerCompat.from(context)
-    val canNotify = showNotification && canShowNotification(context)
-    val notificationId = getNextNotificationId()
-
-    // Utwórz kanał powiadomień
-    val channel = NotificationChannel(
-        DOWNLOAD_CHANNEL_ID,
-        "Pobieranie",
-        NotificationManager.IMPORTANCE_LOW
-    ).apply {
-        description = "Postęp pobierania nagrań"
-    }
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    manager.createNotificationChannel(channel)
-
-    val builder = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.stat_sys_download)
-        .setContentTitle("Pobieranie: $filename")
-        .setProgress(100, 0, false)
-        .setOngoing(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-
-    try {
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Pobieranie: $filename", Toast.LENGTH_SHORT).show()
-            if (canNotify) {
-                safeNotify(context, notificationManager, notificationId, builder)
-            }
-        }
-
-        withContext(Dispatchers.IO) {
-            val connection = URL(videoUrl).openConnection()
-            val contentLength = connection.contentLength.toLong()
-
-            // Użyj MediaStore dla Android 10+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = ContentValues().apply {
-                    put(MediaStore.Video.Media.DISPLAY_NAME, filename)
-                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/DiscGolfEye")
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                }
-
-                val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                    ?: throw Exception("Nie można utworzyć pliku w galerii")
-
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    connection.getInputStream().use { input ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        var lastProgress = 0
-
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-
-                            val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
-                            if (progress != lastProgress && canNotify) {
-                                lastProgress = progress
-                                withContext(Dispatchers.Main) {
-                                    builder.setProgress(100, progress, false)
-                                        .setContentText("$progress%")
-                                    safeNotify(context, notificationManager, notificationId, builder)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Oznacz jako gotowy
-                values.clear()
-                values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                context.contentResolver.update(uri, values, null, null)
-
-            } else {
-                // Android 9 i starsze - zapisz do pliku
-                val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-                val appDir = File(moviesDir, "DiscGolfEye")
-                if (!appDir.exists()) appDir.mkdirs()
-                val outputFile = File(appDir, filename)
-
-                FileOutputStream(outputFile).use { output ->
-                    connection.getInputStream().use { input ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        var lastProgress = 0
-
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-
-                            val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
-                            if (progress != lastProgress && canNotify) {
-                                lastProgress = progress
-                                withContext(Dispatchers.Main) {
-                                    builder.setProgress(100, progress, false)
-                                        .setContentText("$progress%")
-                                    safeNotify(context, notificationManager, notificationId, builder)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        withContext(Dispatchers.Main) {
-            // Anuluj powiadomienie z postępem
-            notificationManager.cancel(notificationId)
-
-            if (canNotify) {
-                // Utwórz NOWE powiadomienie o zakończeniu (nie modyfikuj starego)
-                val openGalleryIntent = Intent(Intent.ACTION_VIEW).apply {
-                    type = "video/*"
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                val pendingIntent = PendingIntent.getActivity(
-                    context,
-                    notificationId,
-                    openGalleryIntent,
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-
-                val doneBuilder = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                    .setContentTitle("Pobrano: $filename")
-                    .setContentText("Kliknij aby otworzyć galerię")
-                    .setAutoCancel(true)
-                    .setContentIntent(pendingIntent)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-
-                safeNotify(context, notificationManager, notificationId + 1000, doneBuilder)
-            }
-            Toast.makeText(context, "Zapisano: $filename", Toast.LENGTH_SHORT).show()
-        }
-
-    } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-            notificationManager.cancel(notificationId)
-            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-}
 
 private suspend fun shareVideo(context: Context, videoUrl: String, filename: String) {
     try {

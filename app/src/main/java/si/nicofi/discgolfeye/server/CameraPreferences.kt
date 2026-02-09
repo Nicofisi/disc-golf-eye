@@ -19,6 +19,7 @@ class CameraPreferences(context: Context) {
         private const val KEY_RECORD_AUDIO = "record_audio"
         private const val KEY_VIDEO_QUALITY = "video_quality"
         private const val KEY_STORAGE_LIMIT = "storage_limit"
+        private const val KEY_FPS = "fps"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -28,7 +29,7 @@ class CameraPreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_CAMERA_ID, value).apply()
 
     var recordAudio: Boolean
-        get() = prefs.getBoolean(KEY_RECORD_AUDIO, true) // domyślnie z dźwiękiem
+        get() = prefs.getBoolean(KEY_RECORD_AUDIO, true)
         set(value) = prefs.edit().putBoolean(KEY_RECORD_AUDIO, value).apply()
 
     var videoQuality: VideoQualityOption
@@ -38,6 +39,10 @@ class CameraPreferences(context: Context) {
     var storageLimit: StorageLimitOption
         get() = StorageLimitOption.fromName(prefs.getString(KEY_STORAGE_LIMIT, StorageLimitOption.MIN_30.name))
         set(value) = prefs.edit().putString(KEY_STORAGE_LIMIT, value.name).apply()
+
+    var fps: FpsOption
+        get() = FpsOption.fromName(prefs.getString(KEY_FPS, FpsOption.FPS_30.name))
+        set(value) = prefs.edit().putString(KEY_FPS, value.name).apply()
 }
 
 enum class StorageLimitOption(val displayName: String, val minutes: Int) {
@@ -53,6 +58,18 @@ enum class StorageLimitOption(val displayName: String, val minutes: Int) {
     companion object {
         fun fromName(name: String?): StorageLimitOption {
             return entries.find { it.name == name } ?: MIN_30
+        }
+    }
+}
+
+enum class FpsOption(val displayName: String, val fps: Int) {
+    FPS_24("24 fps (filmowe)", 24),
+    FPS_30("30 fps (standardowe)", 30),
+    FPS_60("60 fps (płynne)", 60);
+
+    companion object {
+        fun fromName(name: String?): FpsOption {
+            return entries.find { it.name == name } ?: FPS_30
         }
     }
 }

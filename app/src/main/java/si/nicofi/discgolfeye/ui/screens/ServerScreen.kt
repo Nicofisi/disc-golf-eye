@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
+import si.nicofi.discgolfeye.server.FpsOption
 import si.nicofi.discgolfeye.server.ServerService
 import si.nicofi.discgolfeye.server.StorageLimitOption
 import si.nicofi.discgolfeye.server.VideoQualityOption
@@ -65,9 +66,11 @@ fun ServerScreen(
     var showCameraDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var showStorageLimitDialog by remember { mutableStateOf(false) }
+    var showFpsDialog by remember { mutableStateOf(false) }
     var recordAudio by remember { mutableStateOf(cameraPreferences.recordAudio) }
     var selectedQuality by remember { mutableStateOf(cameraPreferences.videoQuality) }
     var selectedStorageLimit by remember { mutableStateOf(cameraPreferences.storageLimit) }
+    var selectedFps by remember { mutableStateOf(cameraPreferences.fps) }
 
     val selectedCamera = availableCameras.find { it.id == selectedCameraId }
 
@@ -217,6 +220,36 @@ fun ServerScreen(
                     Icon(
                         Icons.Default.HighQuality,
                         contentDescription = "Zmień jakość"
+                    )
+                }
+            }
+
+            // Wybór FPS
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showFpsDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Klatki na sekundę",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = selectedFps.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Icon(
+                        Icons.Default.Speed,
+                        contentDescription = "Zmień FPS"
                     )
                 }
             }
@@ -533,6 +566,44 @@ fun ServerScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showStorageLimitDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
+
+    // Dialog wyboru FPS
+    if (showFpsDialog) {
+        AlertDialog(
+            onDismissRequest = { showFpsDialog = false },
+            title = { Text("Klatki na sekundę") },
+            text = {
+                Column {
+                    FpsOption.entries.forEach { fps ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedFps = fps
+                                    cameraPreferences.fps = fps
+                                    showFpsDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedFps == fps,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(fps.displayName)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFpsDialog = false }) {
                     Text("Anuluj")
                 }
             }

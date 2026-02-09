@@ -95,6 +95,10 @@ class RecordingManager(private val context: Context) {
             VideoQualityOption.UHD -> Quality.UHD
         }
 
+        // FPS
+        val targetFps = cameraPreferences.fps.fps
+        Log.d(TAG, "Target FPS: $targetFps, Quality: ${cameraPreferences.videoQuality.displayName}")
+
         val recorder = Recorder.Builder()
             .setQualitySelector(
                 QualitySelector.from(
@@ -105,7 +109,9 @@ class RecordingManager(private val context: Context) {
             .setExecutor(cameraExecutor)
             .build()
 
-        videoCapture = VideoCapture.withOutput(recorder)
+        videoCapture = VideoCapture.Builder(recorder)
+            .setTargetFrameRate(android.util.Range(targetFps, targetFps))
+            .build()
 
         Log.d(TAG, "Binding camera ID: $cameraId")
 

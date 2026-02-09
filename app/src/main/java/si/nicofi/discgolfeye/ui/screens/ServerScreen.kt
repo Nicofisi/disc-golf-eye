@@ -388,6 +388,13 @@ fun ServerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Sprawdź stan pinningu i hotspotu
+        val activityManager = remember { context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager }
+        var isPinned by remember { mutableStateOf(activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) }
+
+        // Czy zablokować interakcje? (przypięty + serwer działa)
+        val isLocked = isPinned && isServerRunning
+
         Button(
             onClick = {
                 if (isServerRunning && !isStopping) {
@@ -422,7 +429,7 @@ fun ServerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            enabled = !isStopping,
+            enabled = !isStopping && !isLocked,
             colors = if (isServerRunning || isStopping) {
                 ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             } else {
@@ -437,16 +444,20 @@ fun ServerScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Zatrzymywanie...")
+            } else if (isLocked) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Zablokowany")
             } else {
                 Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        // Sprawdź stan pinningu i hotspotu
-        val activityManager = remember { context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager }
-        var isPinned by remember { mutableStateOf(activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) }
 
         // Sprawdź czy hotspot jest włączony (odświeżaj co sekundę gdy serwer działa)
         var isHotspotEnabled by remember { mutableStateOf(false) }
@@ -471,7 +482,7 @@ fun ServerScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Przycisk Hotspot - zmienia wygląd gdy aktywny
+            // Przycisk Hotspot - zmienia wygląd gdy aktywny, zablokowany gdy locked
             if (isHotspotEnabled) {
                 Button(
                     onClick = {
@@ -484,6 +495,7 @@ fun ServerScreen(
                         }
                     },
                     modifier = Modifier.weight(1f),
+                    enabled = !isLocked,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
@@ -507,7 +519,8 @@ fun ServerScreen(
                             context.startActivity(intent)
                         }
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLocked
                 ) {
                     Icon(
                         Icons.Default.Wifi,
@@ -519,7 +532,7 @@ fun ServerScreen(
                 }
             }
 
-            // Przycisk Screen Pinning - zmienia wygląd gdy przypięty
+            // Przycisk Screen Pinning - zawsze aktywny (jedyny sposób na odblokowanie)
             if (isPinned) {
                 Button(
                     onClick = {

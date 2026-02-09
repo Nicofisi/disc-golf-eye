@@ -231,14 +231,10 @@ fun ServerScreen(
         Button(
             onClick = {
                 if (isServerRunning && !isStopping) {
-                    // Zatrzymaj serwer - najpierw pokaż spinner
+                    // Zatrzymaj serwer
                     isStopping = true
 
                     scope.launch {
-                        // Małe opóźnienie żeby UI się odświeżyło przed blokowaniem
-                        delay(50)
-
-                        // Wyślij intent
                         val intent = Intent(context, ServerService::class.java).apply {
                             action = ServerService.ACTION_STOP_SERVER
                         }

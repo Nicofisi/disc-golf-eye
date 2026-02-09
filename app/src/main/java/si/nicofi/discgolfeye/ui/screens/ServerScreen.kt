@@ -55,6 +55,7 @@ fun ServerScreen(
         )
     }
     var showCameraDialog by remember { mutableStateOf(false) }
+    var recordAudio by remember { mutableStateOf(cameraPreferences.recordAudio) }
 
     val selectedCamera = availableCameras.find { it.id == selectedCameraId }
 
@@ -126,6 +127,39 @@ fun ServerScreen(
                     Icon(
                         Icons.Default.CameraAlt,
                         contentDescription = "Zmień kamerę"
+                    )
+                }
+            }
+
+            // Switch dźwięku
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (recordAudio) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                            contentDescription = "Dźwięk",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Nagrywaj dźwięk",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Switch(
+                        checked = recordAudio,
+                        onCheckedChange = {
+                            recordAudio = it
+                            cameraPreferences.recordAudio = it
+                        }
                     )
                 }
             }

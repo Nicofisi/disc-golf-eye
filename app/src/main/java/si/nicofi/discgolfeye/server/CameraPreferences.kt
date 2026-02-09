@@ -16,6 +16,7 @@ class CameraPreferences(context: Context) {
     companion object {
         private const val PREFS_NAME = "discgolfeye_camera_prefs"
         private const val KEY_CAMERA_ID = "selected_camera_id"
+        private const val KEY_RECORD_AUDIO = "record_audio"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -23,6 +24,10 @@ class CameraPreferences(context: Context) {
     var selectedCameraId: String?
         get() = prefs.getString(KEY_CAMERA_ID, null)
         set(value) = prefs.edit().putString(KEY_CAMERA_ID, value).apply()
+
+    var recordAudio: Boolean
+        get() = prefs.getBoolean(KEY_RECORD_AUDIO, true) // domyślnie z dźwiękiem
+        set(value) = prefs.edit().putBoolean(KEY_RECORD_AUDIO, value).apply()
 }
 
 /**

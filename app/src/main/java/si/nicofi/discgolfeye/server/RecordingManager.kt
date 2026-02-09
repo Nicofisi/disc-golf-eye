@@ -1,5 +1,6 @@
 package si.nicofi.discgolfeye.server
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -167,6 +168,7 @@ class RecordingManager(private val context: Context) {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun startNewChunk() {
         val videoCapture = videoCapture ?: run {
             Log.e(TAG, "VideoCapture not initialized")
@@ -179,8 +181,15 @@ class RecordingManager(private val context: Context) {
 
         val outputOptions = FileOutputOptions.Builder(videoFile).build()
 
-        activeRecording = videoCapture.output
+        val pendingRecording = videoCapture.output
             .prepareRecording(context, outputOptions)
+
+        // Dodaj dźwięk jeśli włączony w preferencjach
+        if (cameraPreferences.recordAudio) {
+            pendingRecording.withAudioEnabled()
+        }
+
+        activeRecording = pendingRecording
             .start(cameraExecutor) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {

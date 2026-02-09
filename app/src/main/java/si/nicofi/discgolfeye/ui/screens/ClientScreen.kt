@@ -1,6 +1,5 @@
 package si.nicofi.discgolfeye.ui.screens
 
-import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.os.Environment
@@ -23,7 +22,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -309,133 +307,238 @@ private fun VideoItem(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-    val timeString = dateFormat.format(Date(video.timestamp))
-    var isDownloading by remember { mutableStateOf(false) }
+
+    // Oblicz czas względny lub absolutny
+    val timeDisplay = remember(video.timestamp) {
+        val now = System.currentTimeMillis()
+        val diffMs = now - video.timestamp
+        val diffSeconds = diffMs / 1000
+        val diffMinutes = diffSeconds / 60
+
+        when {
+            diffMinutes < 1 -> "${diffSeconds}s temu"
+            diffMinutes < 60 -> "${diffMinutes}min temu"
+            else -> dateFormat.format(Date(video.timestamp))
+        }
+    }
+
+    var downloadProgress by remember { mutableStateOf<Float?>(null) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Miniaturka
-            Box(
+        Column {
+            Row(
                 modifier = Modifier
-                    .size(80.dp, 60.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.DarkGray),
-                contentAlignment = Alignment.Center
+                    .padding(12.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (video.thumbUrl != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data("$baseUrl${video.thumbUrl}")
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Miniaturka ${video.filename}",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+                // Miniaturka
+                Box(
+                    modifier = Modifier
+                        .size(80.dp, 60.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.DarkGray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (video.thumbUrl != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data("$baseUrl${video.thumbUrl}")
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Miniaturka ${video.filename}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = "🎬",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Info
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
-                        text = "🎬",
-                        style = MaterialTheme.typography.headlineMedium
+                        text = timeDisplay,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Info
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = timeString,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Przyciski akcji
-            if (isDownloading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
-                // Pobierz
-                IconButton(
-                    onClick = {
-                        downloadVideo(context, baseUrl, video)
+                // Przyciski akcji
+                if (downloadProgress != null) {
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { downloadProgress!! },
+                            modifier = Modifier.size(32.dp),
+                            strokeWidth = 3.dp
+                        )
+                        Text(
+                            text = "${(downloadProgress!! * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
-                ) {
-                    Text("⬇️", style = MaterialTheme.typography.titleLarge)
-                }
-
-                // Pobierz i udostępnij
-                IconButton(
-                    onClick = {
-                        isDownloading = true
-                        scope.launch {
-                            downloadAndShare(context, baseUrl, video)
-                            isDownloading = false
+                } else {
+                    // Pobierz
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                downloadVideoWithProgress(context, baseUrl, video) { progress ->
+                                    downloadProgress = progress
+                                    if (progress >= 1f) {
+                                        downloadProgress = null
+                                    }
+                                }
+                            }
                         }
+                    ) {
+                        Text("⬇️", style = MaterialTheme.typography.titleLarge)
                     }
-                ) {
-                    Text("📤", style = MaterialTheme.typography.titleLarge)
+
+                    // Pobierz i udostępnij
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                downloadAndShare(context, baseUrl, video) { progress ->
+                                    downloadProgress = progress
+                                    if (progress >= 1f) {
+                                        downloadProgress = null
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text("📤", style = MaterialTheme.typography.titleLarge)
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Play button
+                Text(
+                    text = "▶️",
+                    style = MaterialTheme.typography.headlineMedium
+                )
             }
 
-            Spacer(modifier = Modifier.width(4.dp))
-
-            // Play button
-            Text(
-                text = "▶️",
-                style = MaterialTheme.typography.headlineMedium
-            )
+            // Pasek postępu pod kartą
+            if (downloadProgress != null) {
+                LinearProgressIndicator(
+                    progress = { downloadProgress!! },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                )
+            }
         }
     }
 }
 
-private fun downloadVideo(context: Context, baseUrl: String, video: VideoFileInfo) {
-    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val videoUrl = "$baseUrl${video.videoUrl}"
-
-    val request = DownloadManager.Request(videoUrl.toUri())
-        .setTitle("DiscGolfEye - ${video.filename}")
-        .setDescription("Pobieranie nagrania...")
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "DiscGolfEye/${video.filename}")
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-
-    downloadManager.enqueue(request)
-    Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
-}
-
-private suspend fun downloadAndShare(context: Context, baseUrl: String, video: VideoFileInfo) {
+private suspend fun downloadVideoWithProgress(
+    context: Context,
+    baseUrl: String,
+    video: VideoFileInfo,
+    onProgress: (Float) -> Unit
+) {
     try {
         val videoUrl = "$baseUrl${video.videoUrl}"
+        val totalBytes = (video.sizeMb * 1024 * 1024).toLong()
+
+        // Pobierz do publicznego folderu Movies
+        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val appDir = File(moviesDir, "DiscGolfEye")
+        if (!appDir.exists()) appDir.mkdirs()
+        val outputFile = File(appDir, video.filename)
+
+        withContext(Dispatchers.IO) {
+            val connection = URL(videoUrl).openConnection()
+            connection.connect()
+
+            connection.getInputStream().use { input ->
+                FileOutputStream(outputFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
+                        withContext(Dispatchers.Main) {
+                            onProgress(progress.coerceIn(0f, 0.99f))
+                        }
+                    }
+                }
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            onProgress(1f)
+            Toast.makeText(context, "Pobrano: ${video.filename}", Toast.LENGTH_SHORT).show()
+        }
+
+    } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+            onProgress(1f) // Reset
+            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private suspend fun downloadAndShare(
+    context: Context,
+    baseUrl: String,
+    video: VideoFileInfo,
+    onProgress: (Float) -> Unit
+) {
+    try {
+        val videoUrl = "$baseUrl${video.videoUrl}"
+        val totalBytes = (video.sizeMb * 1024 * 1024).toLong()
 
         // Pobierz do cache
         val cacheFile = File(context.cacheDir, video.filename)
 
         withContext(Dispatchers.IO) {
-            URL(videoUrl).openStream().use { input ->
+            val connection = URL(videoUrl).openConnection()
+            connection.connect()
+
+            connection.getInputStream().use { input ->
                 FileOutputStream(cacheFile).use { output ->
-                    input.copyTo(output)
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
+                        withContext(Dispatchers.Main) {
+                            onProgress(progress.coerceIn(0f, 0.99f))
+                        }
+                    }
                 }
             }
+        }
+
+        withContext(Dispatchers.Main) {
+            onProgress(1f)
         }
 
         // Udostępnij przez FileProvider
@@ -455,6 +558,7 @@ private suspend fun downloadAndShare(context: Context, baseUrl: String, video: V
 
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
+            onProgress(1f) // Reset
             Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }

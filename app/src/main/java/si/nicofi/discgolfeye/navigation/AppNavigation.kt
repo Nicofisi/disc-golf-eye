@@ -28,14 +28,10 @@ fun AppNavigation(
         composable(Screen.RoleSelection.route) {
             RoleSelectionScreen(
                 onServerSelected = {
-                    navController.navigate(Screen.Server.route) {
-                        popUpTo(Screen.RoleSelection.route) { inclusive = true }
-                    }
+                    navController.navigate(Screen.Server.route)
                 },
                 onClientSelected = {
-                    navController.navigate(Screen.Client.route) {
-                        popUpTo(Screen.RoleSelection.route) { inclusive = true }
-                    }
+                    navController.navigate(Screen.Client.route)
                 }
             )
         }

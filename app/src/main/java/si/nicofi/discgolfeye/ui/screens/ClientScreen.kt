@@ -1,5 +1,6 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -366,6 +367,9 @@ private fun VideoPlayerScreen(
     videoName: String,
     onBack: () -> Unit
 ) {
+    // Obsługa gestu cofania
+    BackHandler(onBack = onBack)
+
     Column(
         modifier = Modifier
             .fillMaxSize()

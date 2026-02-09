@@ -26,14 +26,15 @@ fun VideoPlayer(
     val context = LocalContext.current
 
     val exoPlayer = remember {
-        // Szybki start + duży bufor dla swobodnego przewijania
+        // Duży bufor dla swobodnego przewijania (cały chunk w pamięci)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                5_000,   // minBufferMs - minimum bufora (5 sekund)
-                120_000, // maxBufferMs - maksimum bufora (120 sekund = cały chunk)
+                60_000,  // minBufferMs - minimum bufora (60 sekund = cały chunk)
+                120_000, // maxBufferMs - maksimum bufora (120 sekund)
                 500,     // bufferForPlaybackMs - ile zabuforować przed startem (0.5 sekundy)
                 1_000    // bufferForPlaybackAfterRebufferMs - po rebuffer (1 sekunda)
             )
+            .setBackBuffer(60_000, true) // Trzymaj 60 sekund wstecz w pamięci
             .build()
 
         ExoPlayer.Builder(context)

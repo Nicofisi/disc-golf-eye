@@ -40,7 +40,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import si.nicofi.discgolfeye.R
 import si.nicofi.discgolfeye.client.DiscGolfClient
 import si.nicofi.discgolfeye.shared.DeviceStatus
 import si.nicofi.discgolfeye.shared.VideoFileInfo
@@ -496,7 +495,11 @@ private fun VideoPlayerScreen(
 }
 
 private const val DOWNLOAD_CHANNEL_ID = "discgolfeye_download"
-private const val DOWNLOAD_NOTIFICATION_ID = 1001
+private var nextNotificationId = 1001
+
+private fun getNextNotificationId(): Int {
+    return nextNotificationId++
+}
 
 private fun canShowNotification(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -514,7 +517,8 @@ private fun safeNotify(context: Context, notificationManager: NotificationManage
         try {
             notificationManager.notify(id, builder.build())
         } catch (e: SecurityException) {
-            // Ignoruj jeśli brak uprawnień
+            // Uprawnienia odebrane w trakcie - kontynuuj pobieranie bez powiadomień
+            android.util.Log.w("DiscGolfEye", "Notification permission revoked: ${e.message}")
         }
     }
 }
@@ -527,6 +531,7 @@ private suspend fun downloadToGallery(
 ) {
     val notificationManager = NotificationManagerCompat.from(context)
     val canNotify = showNotification && canShowNotification(context)
+    val notificationId = getNextNotificationId()
 
     // Utwórz kanał powiadomień
     val channel = NotificationChannel(
@@ -548,9 +553,9 @@ private suspend fun downloadToGallery(
 
     try {
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Pobieranie: $filename", Toast.LENGTH_SHORT).show()
             if (canNotify) {
-                safeNotify(context, notificationManager, DOWNLOAD_NOTIFICATION_ID, builder)
+                safeNotify(context, notificationManager, notificationId, builder)
             }
         }
 
@@ -587,7 +592,7 @@ private suspend fun downloadToGallery(
                                 withContext(Dispatchers.Main) {
                                     builder.setProgress(100, progress, false)
                                         .setContentText("$progress%")
-                                    safeNotify(context, notificationManager, DOWNLOAD_NOTIFICATION_ID, builder)
+                                    safeNotify(context, notificationManager, notificationId, builder)
                                 }
                             }
                         }
@@ -623,7 +628,7 @@ private suspend fun downloadToGallery(
                                 withContext(Dispatchers.Main) {
                                     builder.setProgress(100, progress, false)
                                         .setContentText("$progress%")
-                                    safeNotify(context, notificationManager, DOWNLOAD_NOTIFICATION_ID, builder)
+                                    safeNotify(context, notificationManager, notificationId, builder)
                                 }
                             }
                         }
@@ -638,15 +643,15 @@ private suspend fun downloadToGallery(
                     .setProgress(0, 0, false)
                     .setOngoing(false)
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                safeNotify(context, notificationManager, DOWNLOAD_NOTIFICATION_ID, builder)
+                safeNotify(context, notificationManager, notificationId, builder)
             }
-            Toast.makeText(context, "Zapisano w Galerii: $filename", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Zapisano: $filename", Toast.LENGTH_SHORT).show()
         }
 
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            notificationManager.cancel(DOWNLOAD_NOTIFICATION_ID)
-            Toast.makeText(context, "Błąd pobierania: ${e.message}", Toast.LENGTH_LONG).show()
+            notificationManager.cancel(notificationId)
+            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }

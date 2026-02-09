@@ -257,21 +257,23 @@ class RecordingManager(private val context: Context) {
             Log.e(TAG, "Error unbinding camera", e)
         }
 
-        // Poczekaj chwilę żeby CameraX dokończyła operacje, potem zamknij executory
-        // Używamy shutdownNow() z opóźnieniem zamiast shutdown() które czeka w nieskończoność
+        // Zamknij executory z timeoutem - nie blokuj głównego wątku
         try {
-            // Daj CameraX 2 sekundy na dokończenie
-            Thread {
-                try {
-                    Thread.sleep(2000)
-                    cameraExecutor.shutdownNow()
-                    thumbnailExecutor.shutdownNow()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error shutting down executors", e)
-                }
-            }.start()
+            cameraExecutor.shutdown()
+            thumbnailExecutor.shutdown()
+
+            // Czekaj maksymalnie 2 sekundy na zakończenie
+            if (!cameraExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                cameraExecutor.shutdownNow()
+            }
+            if (!thumbnailExecutor.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                thumbnailExecutor.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            cameraExecutor.shutdownNow()
+            thumbnailExecutor.shutdownNow()
         } catch (e: Exception) {
-            Log.e(TAG, "Error scheduling executor shutdown", e)
+            Log.e(TAG, "Error shutting down executors", e)
         }
     }
 }

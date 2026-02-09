@@ -12,9 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import si.nicofi.discgolfeye.client.DiscGolfClient
@@ -235,6 +238,7 @@ fun ClientScreen(
                     items(videoFiles) { video ->
                         VideoItem(
                             video = video,
+                            baseUrl = client.getServerBaseUrl() ?: "",
                             onClick = { selectedVideo = video }
                         )
                     }
@@ -286,8 +290,10 @@ private fun StatusItem(
 @Composable
 private fun VideoItem(
     video: VideoFileInfo,
+    baseUrl: String,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val timeString = dateFormat.format(Date(video.timestamp))
 
@@ -298,14 +304,44 @@ private fun VideoItem(
     ) {
         Row(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(12.dp)
                 .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            // Miniaturka
+            Box(
+                modifier = Modifier
+                    .size(80.dp, 60.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.DarkGray),
+                contentAlignment = Alignment.Center
+            ) {
+                if (video.thumbUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data("$baseUrl${video.thumbUrl}")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Miniaturka ${video.filename}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(
+                        text = "🎬",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Info
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = "🎬 $timeString",
+                    text = timeString,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
@@ -315,6 +351,7 @@ private fun VideoItem(
                 )
             }
 
+            // Play button
             Text(
                 text = "▶️",
                 style = MaterialTheme.typography.headlineMedium

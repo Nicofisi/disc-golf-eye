@@ -27,5 +27,6 @@ data class VideoFileInfo(
     val filename: String,
     val timestamp: Long,
     val sizeMb: Float,
-    val videoUrl: String
+    val videoUrl: String,
+    val thumbUrl: String? = null
 )

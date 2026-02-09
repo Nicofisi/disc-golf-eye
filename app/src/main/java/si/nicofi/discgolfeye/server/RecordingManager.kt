@@ -1,6 +1,8 @@
 package si.nicofi.discgolfeye.server
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.os.Environment
 import android.util.Log
 import androidx.camera.core.CameraSelector
@@ -11,6 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.*
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
@@ -29,6 +32,7 @@ class RecordingManager(private val context: Context) {
     private var currentRecordingFile: File? = null
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
+    private val thumbnailExecutor = Executors.newSingleThreadExecutor()
     private var chunkJob: Job? = null
 
     val isRecording: Boolean
@@ -119,6 +123,8 @@ class RecordingManager(private val context: Context) {
                             Log.e(TAG, "Recording error: ${event.error}")
                         } else {
                             Log.d(TAG, "Recording saved: ${videoFile.name} (${videoFile.length() / 1024}KB)")
+                            // Generuj miniaturkę w tle
+                            generateThumbnail(videoFile)
                         }
                     }
                 }
@@ -161,13 +167,51 @@ class RecordingManager(private val context: Context) {
             files.drop(MAX_FILES).forEach { file ->
                 Log.d(TAG, "Deleting old file: ${file.name}")
                 file.delete()
+                // Usuń też miniaturkę
+                getThumbnailFile(file)?.delete()
             }
         }
+    }
+
+    private fun generateThumbnail(videoFile: File) {
+        thumbnailExecutor.execute {
+            try {
+                val retriever = MediaMetadataRetriever()
+                retriever.setDataSource(videoFile.absolutePath)
+
+                // Pobierz klatkę z 1 sekundy filmu
+                val bitmap = retriever.getFrameAtTime(1_000_000) // 1 sekunda w mikrosekundach
+                retriever.release()
+
+                if (bitmap != null) {
+                    val thumbFile = File(recordingsDir, videoFile.nameWithoutExtension + ".jpg")
+                    FileOutputStream(thumbFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+                    }
+                    bitmap.recycle()
+                    Log.d(TAG, "Thumbnail generated: ${thumbFile.name}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to generate thumbnail for ${videoFile.name}", e)
+            }
+        }
+    }
+
+    fun getThumbnailFile(videoFile: File): File? {
+        val thumbFile = File(recordingsDir, videoFile.nameWithoutExtension + ".jpg")
+        return if (thumbFile.exists()) thumbFile else null
+    }
+
+    fun getThumbnailForVideo(filename: String): File? {
+        val baseName = filename.removeSuffix(".mp4")
+        val thumbFile = File(recordingsDir, "$baseName.jpg")
+        return if (thumbFile.exists()) thumbFile else null
     }
 
     fun release() {
         stopRecording()
         cameraExecutor.shutdown()
+        thumbnailExecutor.shutdown()
         cameraProvider?.unbindAll()
     }
 }

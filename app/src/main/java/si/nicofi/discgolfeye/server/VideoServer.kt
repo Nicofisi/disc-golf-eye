@@ -103,14 +103,34 @@ class VideoServer(
                             return@get
                         }
                         val files = manager.getVideoFiles().map { file ->
+                            val hasThumb = manager.getThumbnailForVideo(file.name) != null
                             VideoFileInfo(
                                 filename = file.name,
                                 timestamp = file.lastModified(),
                                 sizeMb = file.length() / (1024f * 1024f),
-                                videoUrl = "/stream/${file.name}"
+                                videoUrl = "/stream/${file.name}",
+                                thumbUrl = if (hasThumb) "/thumb/${file.nameWithoutExtension}.jpg" else null
                             )
                         }
                         call.respond(files)
+                    }
+
+                    get("/thumb/{filename}") {
+                        val filename = call.parameters["filename"] ?: run {
+                            call.respond(HttpStatusCode.BadRequest, "Missing filename")
+                            return@get
+                        }
+                        val manager = getRecordingManager() ?: run {
+                            call.respond(HttpStatusCode.ServiceUnavailable, "Camera not ready")
+                            return@get
+                        }
+                        val thumbFile = File(manager.recordingsDir, filename)
+                        if (!thumbFile.exists()) {
+                            call.respond(HttpStatusCode.NotFound, "Thumbnail not found")
+                            return@get
+                        }
+                        call.response.header(HttpHeaders.ContentType, ContentType.Image.JPEG.toString())
+                        call.respondFile(thumbFile)
                     }
 
                     get("/stream/{filename}") {

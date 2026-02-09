@@ -393,6 +393,14 @@ fun ServerScreen(
         val activityManager = remember { context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager }
         var isPinned by remember { mutableStateOf(activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) }
 
+        // Odświeżaj stan pinningu co 500ms (żeby reagować na systemowe odpięcie)
+        LaunchedEffect(Unit) {
+            while (true) {
+                isPinned = activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+                delay(500)
+            }
+        }
+
         // Czy zablokować interakcje? (przypięty + serwer działa)
         val isLocked = isPinned && isServerRunning
 

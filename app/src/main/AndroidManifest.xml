@@ -20,6 +20,9 @@
     <!-- WakeLock - trzymaj procesor aktywnym podczas nagrywania -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Wibracja dla alertów watchdog -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Powiadomienia (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

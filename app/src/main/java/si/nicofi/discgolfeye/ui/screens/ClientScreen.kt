@@ -25,6 +25,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import si.nicofi.discgolfeye.client.CameraWatchdog
 import si.nicofi.discgolfeye.client.DiscGolfClient
 import si.nicofi.discgolfeye.client.DownloadService
 import si.nicofi.discgolfeye.shared.DeviceStatus
@@ -50,19 +51,35 @@ fun ClientScreen(
     var selectedVideo by remember { mutableStateOf<VideoFileInfo?>(null) }
 
     val client = remember { DiscGolfClient() }
+    val watchdog = remember { CameraWatchdog(context) }
+    var activeAlerts by remember { mutableStateOf<Set<CameraWatchdog.AlertType>>(emptySet()) }
 
     DisposableEffect(Unit) {
-        onDispose { client.close() }
+        onDispose {
+            client.close()
+            watchdog.stopMonitoring()
+        }
     }
 
-    // Auto-refresh gdy połączony
+    // Uruchom Watchdog gdy połączony
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            watchdog.onStateChanged = { state ->
+                activeAlerts = state.activeAlerts
+                state.lastStatus?.let { serverStatus = it }
+            }
+            watchdog.startMonitoring(this) {
+                client.getStatus()
+            }
+        } else {
+            watchdog.stopMonitoring()
+            activeAlerts = emptySet()
+        }
+    }
+
+    // Pobierz listę wideo osobno (watchdog zajmuje się statusem)
     LaunchedEffect(isConnected) {
         while (isConnected) {
-            // Pobierz status
-            client.getStatus().onSuccess { status ->
-                serverStatus = status
-            }
-            // Pobierz listę wideo
             client.getVideos().onSuccess { videos ->
                 videoFiles = videos
             }
@@ -101,6 +118,39 @@ fun ClientScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Banner alertów
+        if (activeAlerts.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Alert",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = when {
+                            activeAlerts.any { it.name.contains("CRITICAL") } -> "⚠️ UWAGA! Sprawdź kamerę!"
+                            else -> "Ostrzeżenie - sprawdź status kamery"
+                        },
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // Status połączenia
         Card(

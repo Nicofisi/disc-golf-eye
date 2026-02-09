@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.provider.Settings
 import android.net.wifi.WifiManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -394,6 +395,11 @@ fun ServerScreen(
 
         // Czy zablokować interakcje? (przypięty + serwer działa)
         val isLocked = isPinned && isServerRunning
+
+        // Blokuj gest cofania gdy zablokowany (przypięty + serwer działa)
+        BackHandler(enabled = isLocked) {
+            // Nie rób nic - zablokowane
+        }
 
         Button(
             onClick = {

@@ -248,32 +248,19 @@ class RecordingManager(private val context: Context) {
     }
 
     fun release() {
+        // Zatrzymaj nagrywanie
         stopRecording()
 
-        // Najpierw unbind kamery
+        // Unbind kamery - to wystarczy, executory niech żyją do końca procesu
+        // Zamykanie executorów powoduje RejectedExecutionException bo CameraX
+        // nadal próbuje ich używać z callbacków MediaCodec
         try {
             cameraProvider?.unbindAll()
         } catch (e: Exception) {
             Log.e(TAG, "Error unbinding camera", e)
         }
 
-        // Zamknij executory z timeoutem - nie blokuj głównego wątku
-        try {
-            cameraExecutor.shutdown()
-            thumbnailExecutor.shutdown()
-
-            // Czekaj maksymalnie 2 sekundy na zakończenie
-            if (!cameraExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                cameraExecutor.shutdownNow()
-            }
-            if (!thumbnailExecutor.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS)) {
-                thumbnailExecutor.shutdownNow()
-            }
-        } catch (e: InterruptedException) {
-            cameraExecutor.shutdownNow()
-            thumbnailExecutor.shutdownNow()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error shutting down executors", e)
-        }
+        // NIE zamykamy executorów - CameraX ich potrzebuje do dokończenia operacji
+        // Zamkną się automatycznie gdy proces się zakończy
     }
 }

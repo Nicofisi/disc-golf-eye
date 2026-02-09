@@ -1,5 +1,6 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.os.Environment
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -305,7 +307,6 @@ private fun VideoItem(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     // Oblicz czas względny lub absolutny
@@ -322,223 +323,170 @@ private fun VideoItem(
         }
     }
 
-    var downloadProgress by remember { mutableStateOf<Float?>(null) }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        Column {
-            Row(
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Miniaturka
+            Box(
                 modifier = Modifier
-                    .padding(12.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(80.dp, 60.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.DarkGray),
+                contentAlignment = Alignment.Center
             ) {
-                // Miniaturka
-                Box(
-                    modifier = Modifier
-                        .size(80.dp, 60.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.DarkGray),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (video.thumbUrl != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data("$baseUrl${video.thumbUrl}")
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Miniaturka ${video.filename}",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Text(
-                            text = "🎬",
-                            style = MaterialTheme.typography.headlineMedium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Info
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = timeDisplay,
-                        style = MaterialTheme.typography.titleMedium
+                if (video.thumbUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data("$baseUrl${video.thumbUrl}")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Miniaturka ${video.filename}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-                    Text(
-                        text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Przyciski akcji
-                if (downloadProgress != null) {
-                    Box(
-                        modifier = Modifier.size(40.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            progress = { downloadProgress!! },
-                            modifier = Modifier.size(32.dp),
-                            strokeWidth = 3.dp
-                        )
-                        Text(
-                            text = "${(downloadProgress!! * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
                 } else {
-                    // Pobierz
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                downloadVideoWithProgress(context, baseUrl, video) { progress ->
-                                    downloadProgress = progress
-                                    if (progress >= 1f) {
-                                        downloadProgress = null
-                                    }
-                                }
-                            }
-                        }
-                    ) {
-                        Text("⬇️", style = MaterialTheme.typography.titleLarge)
-                    }
-
-                    // Pobierz i udostępnij
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                downloadAndShare(context, baseUrl, video) { progress ->
-                                    downloadProgress = progress
-                                    if (progress >= 1f) {
-                                        downloadProgress = null
-                                    }
-                                }
-                            }
-                        }
-                    ) {
-                        Text("📤", style = MaterialTheme.typography.titleLarge)
-                    }
+                    Text(
+                        text = "🎬",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
                 }
+            }
 
-                Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-                // Play button
+            // Info
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = "▶️",
-                    style = MaterialTheme.typography.headlineMedium
+                    text = timeDisplay,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Pasek postępu pod kartą
-            if (downloadProgress != null) {
-                LinearProgressIndicator(
-                    progress = { downloadProgress!! },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp),
-                )
-            }
+            // Play button
+            Text(
+                text = "▶️",
+                style = MaterialTheme.typography.headlineLarge
+            )
         }
     }
 }
 
-private suspend fun downloadVideoWithProgress(
-    context: Context,
-    baseUrl: String,
-    video: VideoFileInfo,
-    onProgress: (Float) -> Unit
+
+@Composable
+private fun VideoPlayerScreen(
+    videoUrl: String,
+    videoName: String,
+    onBack: () -> Unit
 ) {
-    try {
-        val videoUrl = "$baseUrl${video.videoUrl}"
-        val totalBytes = (video.sizeMb * 1024 * 1024).toLong()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-        // Pobierz do publicznego folderu Movies
-        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-        val appDir = File(moviesDir, "DiscGolfEye")
-        if (!appDir.exists()) appDir.mkdirs()
-        val outputFile = File(appDir, video.filename)
+    // Obsługa gestu cofania
+    BackHandler(onBack = onBack)
 
-        withContext(Dispatchers.IO) {
-            val connection = URL(videoUrl).openConnection()
-            connection.connect()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        // Header z przyciskami
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Text("← Wróć", color = Color.White)
+            }
 
-            connection.getInputStream().use { input ->
-                FileOutputStream(outputFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead = 0L
+            Text(
+                text = videoName,
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
 
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
-                        withContext(Dispatchers.Main) {
-                            onProgress(progress.coerceIn(0f, 0.99f))
-                        }
+            // Przycisk pobierania
+            IconButton(
+                onClick = {
+                    downloadWithNotification(context, videoUrl, videoName)
+                    Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+                }
+            ) {
+                Text("⬇️", style = MaterialTheme.typography.headlineSmall)
+            }
+
+            // Przycisk udostępniania
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        shareVideo(context, videoUrl, videoName)
                     }
                 }
+            ) {
+                Text("📤", style = MaterialTheme.typography.headlineSmall)
             }
         }
 
-        withContext(Dispatchers.Main) {
-            onProgress(1f)
-            Toast.makeText(context, "Pobrano: ${video.filename}", Toast.LENGTH_SHORT).show()
-        }
-
-    } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-            onProgress(1f) // Reset
-            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
+        // Player
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+        ) {
+            VideoPlayer(
+                videoUrl = videoUrl,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
 
-private suspend fun downloadAndShare(
-    context: Context,
-    baseUrl: String,
-    video: VideoFileInfo,
-    onProgress: (Float) -> Unit
-) {
+private fun downloadWithNotification(context: Context, videoUrl: String, filename: String) {
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+
+    val request = DownloadManager.Request(videoUrl.toUri())
+        .setTitle("DiscGolfEye - $filename")
+        .setDescription("Pobieranie nagrania...")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "DiscGolfEye/$filename")
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+
+    downloadManager.enqueue(request)
+}
+
+private suspend fun shareVideo(context: Context, videoUrl: String, filename: String) {
     try {
-        val videoUrl = "$baseUrl${video.videoUrl}"
-        val totalBytes = (video.sizeMb * 1024 * 1024).toLong()
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Przygotowywanie...", Toast.LENGTH_SHORT).show()
+        }
 
         // Pobierz do cache
-        val cacheFile = File(context.cacheDir, video.filename)
+        val cacheFile = File(context.cacheDir, filename)
 
         withContext(Dispatchers.IO) {
-            val connection = URL(videoUrl).openConnection()
-            connection.connect()
-
-            connection.getInputStream().use { input ->
+            URL(videoUrl).openStream().use { input ->
                 FileOutputStream(cacheFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead = 0L
-
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
-                        withContext(Dispatchers.Main) {
-                            onProgress(progress.coerceIn(0f, 0.99f))
-                        }
-                    }
+                    input.copyTo(output)
                 }
             }
-        }
-
-        withContext(Dispatchers.Main) {
-            onProgress(1f)
         }
 
         // Udostępnij przez FileProvider
@@ -558,54 +506,8 @@ private suspend fun downloadAndShare(
 
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            onProgress(1f) // Reset
             Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
 
-@Composable
-private fun VideoPlayerScreen(
-    videoUrl: String,
-    videoName: String,
-    onBack: () -> Unit
-) {
-    // Obsługa gestu cofania
-    BackHandler(onBack = onBack)
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) {
-                Text("← Wróć", color = Color.White)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = videoName,
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
-
-        // Player
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-        ) {
-            VideoPlayer(
-                videoUrl = videoUrl,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-    }
-}

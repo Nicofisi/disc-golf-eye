@@ -1,5 +1,10 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import android.app.DownloadManager
+import android.content.Context
+import android.content.Intent
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,14 +22,21 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.client.DiscGolfClient
 import si.nicofi.discgolfeye.shared.DeviceStatus
 import si.nicofi.discgolfeye.shared.VideoFileInfo
 import si.nicofi.discgolfeye.ui.components.VideoPlayer
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -295,8 +307,10 @@ private fun VideoItem(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val timeString = dateFormat.format(Date(video.timestamp))
+    var isDownloading by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -346,17 +360,102 @@ private fun VideoItem(
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "${String.format("%.1f", video.sizeMb)} MB",
+                    text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            // Przyciski akcji
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                // Pobierz
+                IconButton(
+                    onClick = {
+                        downloadVideo(context, baseUrl, video)
+                    }
+                ) {
+                    Text("⬇️", style = MaterialTheme.typography.titleLarge)
+                }
+
+                // Pobierz i udostępnij
+                IconButton(
+                    onClick = {
+                        isDownloading = true
+                        scope.launch {
+                            downloadAndShare(context, baseUrl, video)
+                            isDownloading = false
+                        }
+                    }
+                ) {
+                    Text("📤", style = MaterialTheme.typography.titleLarge)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
 
             // Play button
             Text(
                 text = "▶️",
                 style = MaterialTheme.typography.headlineMedium
             )
+        }
+    }
+}
+
+private fun downloadVideo(context: Context, baseUrl: String, video: VideoFileInfo) {
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val videoUrl = "$baseUrl${video.videoUrl}"
+
+    val request = DownloadManager.Request(videoUrl.toUri())
+        .setTitle("DiscGolfEye - ${video.filename}")
+        .setDescription("Pobieranie nagrania...")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "DiscGolfEye/${video.filename}")
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+
+    downloadManager.enqueue(request)
+    Toast.makeText(context, "Pobieranie rozpoczęte...", Toast.LENGTH_SHORT).show()
+}
+
+private suspend fun downloadAndShare(context: Context, baseUrl: String, video: VideoFileInfo) {
+    try {
+        val videoUrl = "$baseUrl${video.videoUrl}"
+
+        // Pobierz do cache
+        val cacheFile = File(context.cacheDir, video.filename)
+
+        withContext(Dispatchers.IO) {
+            URL(videoUrl).openStream().use { input ->
+                FileOutputStream(cacheFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+
+        // Udostępnij przez FileProvider
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            cacheFile
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "video/mp4"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "Udostępnij nagranie"))
+
+    } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }

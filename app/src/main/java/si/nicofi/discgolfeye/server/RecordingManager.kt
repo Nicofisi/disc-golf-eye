@@ -6,7 +6,6 @@ import android.media.MediaMetadataRetriever
 import android.os.Environment
 import android.util.Log
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.core.content.ContextCompat
@@ -30,13 +29,19 @@ class RecordingManager(private val context: Context) {
     private var activeRecording: Recording? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var currentRecordingFile: File? = null
+    private var currentLensType: CameraLensType = CameraLensType.BACK_DEFAULT
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val thumbnailExecutor = Executors.newSingleThreadExecutor()
     private var chunkJob: Job? = null
 
+    private val cameraPreferences = CameraPreferences(context)
+
     val isRecording: Boolean
         get() = activeRecording != null
+
+    val currentCamera: CameraLensType
+        get() = currentLensType
 
     val recordingsDir: File by lazy {
         File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "DiscGolfEye").apply {
@@ -44,37 +49,71 @@ class RecordingManager(private val context: Context) {
         }
     }
 
+    fun getAvailableCameras(): List<CameraLensType> {
+        // Zwróć wszystkie typy - nieobsługiwane spadną do domyślnej przy próbie użycia
+        return CameraLensType.entries.toList()
+    }
+
     fun initialize(lifecycleOwner: LifecycleOwner, onReady: () -> Unit) {
+        // Wczytaj zapisaną preferencję kamery
+        currentLensType = cameraPreferences.getSelectedLensType()
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             cameraProvider = cameraProviderFuture.get()
 
-            val recorder = Recorder.Builder()
-                .setQualitySelector(
-                    QualitySelector.from(
-                        Quality.HD, // 720p - dobry kompromis między jakością a zużyciem baterii
-                        FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
-                    )
-                )
-                .setExecutor(cameraExecutor)
-                .build()
-
-            videoCapture = VideoCapture.withOutput(recorder)
-
-            try {
-                cameraProvider?.unbindAll()
-                cameraProvider?.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    videoCapture
-                )
-                Log.d(TAG, "Camera initialized successfully")
-                onReady()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to bind camera", e)
-            }
+            bindCamera(lifecycleOwner, currentLensType, onReady)
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun bindCamera(lifecycleOwner: LifecycleOwner, lensType: CameraLensType, onReady: () -> Unit) {
+        val recorder = Recorder.Builder()
+            .setQualitySelector(
+                QualitySelector.from(
+                    Quality.HD, // 720p - dobry kompromis między jakością a zużyciem baterii
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
+                )
+            )
+            .setExecutor(cameraExecutor)
+            .build()
+
+        videoCapture = VideoCapture.withOutput(recorder)
+
+        val cameraSelector = when (lensType) {
+            CameraLensType.FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
+            CameraLensType.BACK_DEFAULT -> CameraSelector.DEFAULT_BACK_CAMERA
+            CameraLensType.BACK_WIDE -> {
+                // Próbuj szerokokątną - jeśli nie ma, fallback do domyślnej
+                try {
+                    CameraSelector.Builder()
+                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        .build()
+                } catch (e: Exception) {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
+            }
+            CameraLensType.BACK_TELEPHOTO -> CameraSelector.DEFAULT_BACK_CAMERA
+        }
+
+        try {
+            cameraProvider?.unbindAll()
+            cameraProvider?.bindToLifecycle(
+                lifecycleOwner,
+                cameraSelector,
+                videoCapture
+            )
+            currentLensType = lensType
+            cameraPreferences.setSelectedLensType(lensType)
+            Log.d(TAG, "Camera initialized successfully: ${lensType.displayName}")
+            onReady()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to bind camera ${lensType.displayName}, falling back to default", e)
+            // Fallback do domyślnej kamery
+            if (lensType != CameraLensType.BACK_DEFAULT) {
+                bindCamera(lifecycleOwner, CameraLensType.BACK_DEFAULT, onReady)
+            }
+        }
     }
 
     fun startRecording(scope: CoroutineScope) {

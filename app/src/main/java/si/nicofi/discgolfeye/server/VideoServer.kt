@@ -96,6 +96,40 @@ class VideoServer(
                         ))
                     }
 
+                    get("/cameras") {
+                        val manager = getRecordingManager()
+                        if (manager == null) {
+                            call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Camera not ready"))
+                            return@get
+                        }
+                        val available = manager.getAvailableCameras()
+                        val current = manager.currentCamera
+                        call.respond(mapOf(
+                            "available" to available.map { mapOf("id" to it.name, "name" to it.displayName) },
+                            "current" to mapOf("id" to current.name, "name" to current.displayName)
+                        ))
+                    }
+
+                    post("/camera/switch/{type}") {
+                        val typeStr = call.parameters["type"] ?: run {
+                            call.respond(HttpStatusCode.BadRequest, "Missing camera type")
+                            return@post
+                        }
+                        val lensType = try {
+                            CameraLensType.valueOf(typeStr)
+                        } catch (e: Exception) {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid camera type: $typeStr")
+                            return@post
+                        }
+
+                        // Zwróć odpowiedź że zmiana jest w toku - faktyczna zmiana wymaga lifecycle
+                        call.respond(mapOf(
+                            "status" to "switch_requested",
+                            "requestedCamera" to lensType.displayName,
+                            "note" to "Camera switch requires restart of recording service"
+                        ))
+                    }
+
                     get("/videos") {
                         val manager = getRecordingManager()
                         if (manager == null) {

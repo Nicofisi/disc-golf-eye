@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import si.nicofi.discgolfeye.server.CameraLensType
+import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
 
 @Composable
@@ -34,6 +36,11 @@ fun ServerScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         )
     }
+
+    // Wybór kamery
+    val cameraPreferences = remember { CameraPreferences(context) }
+    var selectedCamera by remember { mutableStateOf(cameraPreferences.getSelectedLensType()) }
+    var showCameraDialog by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -75,6 +82,40 @@ fun ServerScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Wybór kamery (tylko gdy serwer nie działa)
+        if (!isServerRunning) {
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showCameraDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Kamera",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = selectedCamera.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Icon(
+                        Icons.Default.CameraAlt,
+                        contentDescription = "Zmień kamerę"
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // Status kamery - duży box zamiast podglądu
         Box(
@@ -217,6 +258,42 @@ fun ServerScreen(
             text = "Włącz Hotspot Wi-Fi, uruchom serwer i połącz drugi telefon.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    // Dialog wyboru kamery
+    if (showCameraDialog) {
+        AlertDialog(
+            onDismissRequest = { showCameraDialog = false },
+            title = { Text("Wybierz kamerę") },
+            text = {
+                Column {
+                    CameraLensType.entries.forEach { lensType ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedCamera == lensType,
+                                onClick = {
+                                    selectedCamera = lensType
+                                    cameraPreferences.setSelectedLensType(lensType)
+                                    showCameraDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(lensType.displayName)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCameraDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
         )
     }
 }

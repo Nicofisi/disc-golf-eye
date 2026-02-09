@@ -96,7 +96,13 @@ class ServerService : Service(), LifecycleOwner {
     }
 
     private fun stopServer() {
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        try {
+            if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.CREATED)) {
+                lifecycleRegistry.currentState = Lifecycle.State.CREATED
+            }
+        } catch (e: Exception) {
+            // Ignoruj błędy lifecycle przy zamykaniu
+        }
 
         recordingManager?.release()
         recordingManager = null

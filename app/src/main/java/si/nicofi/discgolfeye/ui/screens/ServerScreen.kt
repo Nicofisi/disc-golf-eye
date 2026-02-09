@@ -443,6 +443,10 @@ fun ServerScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Sprawdź stan pinningu
+        val activityManager = remember { context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager }
+        var isPinned by remember { mutableStateOf(activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) }
+
         // Przyciski pomocnicze: Hotspot i Screen Pinning
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -472,41 +476,56 @@ fun ServerScreen(
                 Text("Hotspot", style = MaterialTheme.typography.bodySmall)
             }
 
-            // Przycisk Screen Pinning
-            OutlinedButton(
-                onClick = {
-                    val activity = context as? Activity
-                    if (activity != null) {
-                        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                        if (activityManager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
-                            // Przypnij ekran
+            // Przycisk Screen Pinning - zmienia wygląd gdy przypięty
+            if (isPinned) {
+                Button(
+                    onClick = {
+                        val activity = context as? Activity
+                        activity?.stopLockTask()
+                        isPinned = false
+                        Toast.makeText(context, "Aplikacja odpięta", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        Icons.Default.PushPin,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Odpnij", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        val activity = context as? Activity
+                        if (activity != null) {
                             activity.startLockTask()
+                            isPinned = true
                             Toast.makeText(context, "Aplikacja przypięta! Przytrzymaj ◀ i ▢ aby odpiąć.", Toast.LENGTH_LONG).show()
                         } else {
-                            // Odepnij ekran
-                            activity.stopLockTask()
-                            Toast.makeText(context, "Aplikacja odpięta", Toast.LENGTH_SHORT).show()
+                            try {
+                                val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
+                                context.startActivity(intent)
+                                Toast.makeText(context, "Włącz 'Przypinanie ekranu' w ustawieniach", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Otwórz Ustawienia → Bezpieczeństwo → Przypinanie ekranu", Toast.LENGTH_LONG).show()
+                            }
                         }
-                    } else {
-                        // Otwórz ustawienia screen pinning
-                        try {
-                            val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
-                            context.startActivity(intent)
-                            Toast.makeText(context, "Włącz 'Przypinanie ekranu' w ustawieniach", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Otwórz Ustawienia → Bezpieczeństwo → Przypinanie ekranu", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    Icons.Default.PushPin,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Przypnij", style = MaterialTheme.typography.bodySmall)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        Icons.Default.PushPin,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Przypnij", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
 

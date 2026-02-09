@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -34,6 +35,7 @@ import si.nicofi.discgolfeye.ui.components.VideoPlayer
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientScreen(
     modifier: Modifier = Modifier
@@ -49,6 +51,7 @@ fun ClientScreen(
     var serverStatus by remember { mutableStateOf<DeviceStatus?>(null) }
     var videoFiles by remember { mutableStateOf<List<VideoFileInfo>>(emptyList()) }
     var selectedVideo by remember { mutableStateOf<VideoFileInfo?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     val client = remember { DiscGolfClient() }
     val watchdog = remember { CameraWatchdog(context) }
@@ -299,16 +302,35 @@ fun ClientScreen(
                     )
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        scope.launch {
+                            isRefreshing = true
+                            client.triggerFlush()
+                            delay(500)
+                            client.getVideos().onSuccess { videos ->
+                                videoFiles = videos
+                            }
+                            client.getStatus().onSuccess { status ->
+                                serverStatus = status
+                            }
+                            isRefreshing = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    items(videoFiles) { video ->
-                        VideoItem(
-                            video = video,
-                            baseUrl = client.getServerBaseUrl() ?: "",
-                            onClick = { selectedVideo = video }
-                        )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(videoFiles) { video ->
+                            VideoItem(
+                                video = video,
+                                baseUrl = client.getServerBaseUrl() ?: "",
+                                onClick = { selectedVideo = video }
+                            )
+                        }
                     }
                 }
             }

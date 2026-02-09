@@ -19,6 +19,7 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 
 class DownloadService : Service() {
 
@@ -28,7 +29,7 @@ class DownloadService : Service() {
         const val EXTRA_FILENAME = "filename"
 
         private const val CHANNEL_ID = "discgolfeye_download"
-        private const val NOTIFICATION_ID = 2001
+        private val nextNotificationId = AtomicInteger(2001)
 
         fun startDownload(context: Context, videoUrl: String, filename: String) {
             val intent = Intent(context, DownloadService::class.java).apply {
@@ -41,8 +42,7 @@ class DownloadService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var downloadJob: Job? = null
-    private var savedFileUri: Uri? = null
+    private val activeDownloads = mutableMapOf<Int, Job>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,45 +57,68 @@ class DownloadService : Service() {
                 val videoUrl = intent.getStringExtra(EXTRA_VIDEO_URL) ?: return START_NOT_STICKY
                 val filename = intent.getStringExtra(EXTRA_FILENAME) ?: return START_NOT_STICKY
 
-                startForeground(NOTIFICATION_ID, createProgressNotification("Rozpoczynam...", 0))
-                startDownload(videoUrl, filename)
+                val notificationId = nextNotificationId.getAndIncrement()
+
+                // Startuj jako foreground z pierwszym powiadomieniem
+                if (activeDownloads.isEmpty()) {
+                    startForeground(notificationId, createProgressNotification(notificationId, filename, 0))
+                }
+
+                startDownload(videoUrl, filename, notificationId)
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun startDownload(videoUrl: String, filename: String) {
-        downloadJob = serviceScope.launch {
+    private fun startDownload(videoUrl: String, filename: String, notificationId: Int) {
+        val job = serviceScope.launch {
+            var savedFileUri: Uri? = null
+
             try {
+                // Pokaż powiadomienie
+                showProgressNotification(notificationId, filename, 0)
+
                 val connection = URL(videoUrl).openConnection()
                 connection.connectTimeout = 30000
                 connection.readTimeout = 30000
                 val contentLength = connection.contentLength.toLong()
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    downloadWithMediaStore(connection, filename, contentLength)
+                    savedFileUri = downloadWithMediaStore(connection, filename, contentLength, notificationId)
                 } else {
-                    downloadToFile(connection, filename, contentLength)
+                    savedFileUri = downloadToFile(connection, filename, contentLength, notificationId)
                 }
 
                 withContext(Dispatchers.Main) {
-                    showCompletedNotification(filename)
+                    showCompletedNotification(notificationId, filename, savedFileUri)
                     Toast.makeText(this@DownloadService, "Zapisano: $filename", Toast.LENGTH_SHORT).show()
                 }
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    showErrorNotification(filename, e.message ?: "Nieznany błąd")
+                    showErrorNotification(notificationId, filename, e.message ?: "Nieznany błąd")
                     Toast.makeText(this@DownloadService, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             } finally {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                activeDownloads.remove(notificationId)
+
+                // Jeśli to ostatnie pobieranie, zatrzymaj serwis
+                if (activeDownloads.isEmpty()) {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                    stopSelf()
+                }
             }
         }
+
+        activeDownloads[notificationId] = job
     }
 
-    private suspend fun downloadWithMediaStore(connection: java.net.URLConnection, filename: String, contentLength: Long) {
+    private suspend fun downloadWithMediaStore(
+        connection: java.net.URLConnection,
+        filename: String,
+        contentLength: Long,
+        notificationId: Int
+    ): Uri {
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, filename)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
@@ -120,7 +143,7 @@ class DownloadService : Service() {
                     val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
                     if (progress != lastProgress) {
                         lastProgress = progress
-                        updateProgress(progress)
+                        showProgressNotification(notificationId, filename, progress)
                     }
                 }
             }
@@ -131,11 +154,15 @@ class DownloadService : Service() {
         values.put(MediaStore.Video.Media.IS_PENDING, 0)
         contentResolver.update(uri, values, null, null)
 
-        // Zapisz URI do użycia w powiadomieniu
-        savedFileUri = uri
+        return uri
     }
 
-    private fun downloadToFile(connection: java.net.URLConnection, filename: String, contentLength: Long) {
+    private fun downloadToFile(
+        connection: java.net.URLConnection,
+        filename: String,
+        contentLength: Long,
+        notificationId: Int
+    ): Uri {
         val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         val appDir = File(moviesDir, "DiscGolfEye")
         if (!appDir.exists()) appDir.mkdirs()
@@ -155,20 +182,19 @@ class DownloadService : Service() {
                     val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
                     if (progress != lastProgress) {
                         lastProgress = progress
-                        updateProgress(progress)
+                        showProgressNotification(notificationId, filename, progress)
                     }
                 }
             }
         }
 
-        // Zapisz URI do użycia w powiadomieniu
-        savedFileUri = FileProvider.getUriForFile(this, "${packageName}.provider", outputFile)
+        return FileProvider.getUriForFile(this, "${packageName}.provider", outputFile)
     }
 
-    private fun updateProgress(progress: Int) {
-        val notification = createProgressNotification("$progress%", progress)
+    private fun showProgressNotification(notificationId: Int, filename: String, progress: Int) {
+        val notification = createProgressNotification(notificationId, filename, progress)
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification)
+        manager.notify(notificationId, notification)
     }
 
     private fun createNotificationChannel() {
@@ -183,20 +209,25 @@ class DownloadService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun createProgressNotification(text: String, progress: Int) =
+    private fun createProgressNotification(notificationId: Int, filename: String, progress: Int) =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Pobieranie nagrania")
-            .setContentText(text)
+            .setContentTitle("Pobieranie: $filename")
+            .setContentText("$progress%")
             .setProgress(100, progress, false)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-    private fun showCompletedNotification(filename: String) {
-        val openIntent = if (savedFileUri != null) {
+    private fun showCompletedNotification(notificationId: Int, filename: String, fileUri: Uri?) {
+        // Anuluj powiadomienie z postępem
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(notificationId)
+
+        // Nowe powiadomienie o zakończeniu
+        val openIntent = if (fileUri != null) {
             Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(savedFileUri, "video/mp4")
+                setDataAndType(fileUri, "video/mp4")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
         } else {
@@ -208,7 +239,7 @@ class DownloadService : Service() {
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            notificationId,
             openIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -222,11 +253,13 @@ class DownloadService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID + 1, notification)
+        manager.notify(notificationId + 1000, notification)
     }
 
-    private fun showErrorNotification(filename: String, error: String) {
+    private fun showErrorNotification(notificationId: Int, filename: String, error: String) {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(notificationId)
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("Błąd pobierania")
@@ -235,13 +268,12 @@ class DownloadService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID + 2, notification)
+        manager.notify(notificationId + 2000, notification)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        downloadJob?.cancel()
+        activeDownloads.values.forEach { it.cancel() }
         serviceScope.cancel()
     }
 }

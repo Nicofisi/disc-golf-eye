@@ -541,6 +541,10 @@ private fun VideoPlayerScreen(
 ) {
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+
+    // Lokalny state dla star - toggleuje się od razu
+    var isStarred by remember(video.filename) { mutableStateOf(video.isStarred) }
 
     // Nazwa pliku z datą
     val downloadFilename = remember(video.filename) {
@@ -581,12 +585,15 @@ private fun VideoPlayerScreen(
 
             // Przycisk Star
             IconButton(
-                onClick = { onStar(video.filename) }
+                onClick = {
+                    isStarred = !isStarred // Toggle lokalnie od razu
+                    onStar(video.filename)
+                }
             ) {
                 Icon(
-                    if (video.isStarred) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = if (video.isStarred) "Usuń z ulubionych" else "Dodaj do ulubionych",
-                    tint = if (video.isStarred) Color(0xFFFFD700) else Color.White
+                    if (isStarred) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (isStarred) "Usuń z ulubionych" else "Dodaj do ulubionych",
+                    tint = if (isStarred) Color(0xFFFFD700) else Color.White
                 )
             }
 
@@ -604,15 +611,33 @@ private fun VideoPlayerScreen(
                 )
             }
 
-            // Przycisk Delete (tylko jeśli nie starred)
-            if (!video.isStarred) {
-                IconButton(
-                    onClick = { showDeleteDialog = true }
-                ) {
+            // Menu trzykropkowe
+            Box {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Usuń",
-                        tint = Color.Red.copy(alpha = 0.8f)
+                        Icons.Default.MoreVert,
+                        contentDescription = "Więcej opcji",
+                        tint = Color.White
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Usuń nagranie", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            showMenu = false
+                            showDeleteDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     )
                 }
             }
@@ -637,7 +662,17 @@ private fun VideoPlayerScreen(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Usuń nagranie") },
             text = {
-                Text("Czy na pewno chcesz usunąć ${video.filename}?\n\nTej operacji nie można cofnąć.")
+                Column {
+                    if (isStarred) {
+                        Text(
+                            "⚠️ To nagranie jest oznaczone jako ulubione!",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    Text("Czy na pewno chcesz usunąć ${video.filename}?\n\nTej operacji nie można cofnąć.")
+                }
             },
             confirmButton = {
                 TextButton(

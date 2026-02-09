@@ -169,11 +169,9 @@ class VideoServer(
                             call.respond(HttpStatusCode.ServiceUnavailable, "Camera not ready")
                             return@delete
                         }
-                        if (manager.isStarred(filename)) {
-                            call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Cannot delete starred video"))
-                            return@delete
-                        }
-                        val deleted = manager.deleteVideo(filename)
+                        // Użytkownik może usunąć wszystko (w tym starred)
+                        // Tylko automatyczne cleanup nie usuwa starred
+                        val deleted = manager.deleteVideo(filename, force = true)
                         if (deleted) {
                             call.respond(mapOf("status" to "deleted", "filename" to filename))
                         } else {

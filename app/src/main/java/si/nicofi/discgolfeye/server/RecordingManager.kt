@@ -348,11 +348,18 @@ class RecordingManager(private val context: Context) {
         return isNowStarred
     }
 
-    fun deleteVideo(filename: String): Boolean {
-        // Nie pozwól usunąć starred
-        if (isStarred(filename)) {
+    fun deleteVideo(filename: String, force: Boolean = false): Boolean {
+        // Nie pozwól usunąć starred (chyba że force = true - ręczne usunięcie przez użytkownika)
+        if (!force && isStarred(filename)) {
             Log.w(TAG, "Cannot delete starred file: $filename")
             return false
+        }
+
+        // Jeśli usuwamy starred z force, usuń też z listy starred
+        if (force && isStarred(filename)) {
+            val starred = getStarredFilenames().toMutableSet()
+            starred.remove(filename)
+            saveStarredFilenames(starred)
         }
 
         val videoFile = File(recordingsDir, filename)

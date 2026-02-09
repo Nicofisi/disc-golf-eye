@@ -451,7 +451,7 @@ fun ServerScreen(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Zablokowany")
+                Text("Odepnij aby odblokować")
             } else {
                 Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
             }
@@ -532,7 +532,7 @@ fun ServerScreen(
                 }
             }
 
-            // Przycisk Screen Pinning - zawsze aktywny (jedyny sposób na odblokowanie)
+            // Przycisk Screen Pinning - zablokowany gdy locked (ale użytkownik może odpiąć gestem systemowym)
             if (isPinned) {
                 Button(
                     onClick = {
@@ -541,6 +541,7 @@ fun ServerScreen(
                         isPinned = false
                     },
                     modifier = Modifier.weight(1f),
+                    enabled = !isLocked,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
@@ -551,7 +552,7 @@ fun ServerScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Odpnij", style = MaterialTheme.typography.bodySmall)
+                    Text("Odepnij", style = MaterialTheme.typography.bodySmall)
                 }
             } else {
                 OutlinedButton(

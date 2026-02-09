@@ -386,17 +386,29 @@ private fun VideoItem(
     val context = LocalContext.current
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
-    // Oblicz czas względny lub absolutny
-    val timeDisplay = remember(video.timestamp) {
-        val now = System.currentTimeMillis()
-        val diffMs = now - video.timestamp
-        val diffSeconds = diffMs / 1000
-        val diffMinutes = diffSeconds / 60
+    // Czas który aktualizuje się co sekundę
+    var timeDisplay by remember { mutableStateOf("") }
 
-        when {
-            diffMinutes < 1 -> "${diffSeconds}s temu"
-            diffMinutes < 60 -> "${diffMinutes}min temu"
-            else -> dateFormat.format(Date(video.timestamp))
+    LaunchedEffect(video.timestamp) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            val diffMs = now - video.timestamp
+            val diffSeconds = diffMs / 1000
+            val diffMinutes = diffSeconds / 60
+
+            timeDisplay = when {
+                diffMinutes < 1 -> "${diffSeconds}s temu"
+                diffMinutes < 60 -> "${diffMinutes}min temu"
+                else -> dateFormat.format(Date(video.timestamp))
+            }
+
+            // Aktualizuj co sekundę jeśli < 1min, co 10s jeśli < 1h, inaczej nie aktualizuj
+            val delayMs = when {
+                diffMinutes < 1 -> 1000L
+                diffMinutes < 60 -> 10000L
+                else -> break // Nie potrzebujemy aktualizować po godzinie
+            }
+            delay(delayMs)
         }
     }
 

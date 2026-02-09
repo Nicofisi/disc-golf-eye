@@ -41,6 +41,7 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -424,7 +425,6 @@ private fun VideoPlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var isCurrentlyDownloading by remember { mutableStateOf(false) }
 
     // Sprawdź uprawnienia do powiadomień (Android 13+)
@@ -452,9 +452,11 @@ private fun VideoPlayerScreen(
         hasNotificationPermission = isGranted
         if (!isDownloading()) {
             isCurrentlyDownloading = true
-            scope.launch {
+            GlobalScope.launch {
                 downloadToGallery(context, videoUrl, downloadFilename, isGranted)
-                isCurrentlyDownloading = false
+                withContext(Dispatchers.Main) {
+                    isCurrentlyDownloading = false
+                }
             }
         }
     }
@@ -496,9 +498,11 @@ private fun VideoPlayerScreen(
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
                         isCurrentlyDownloading = true
-                        scope.launch {
+                        GlobalScope.launch {
                             downloadToGallery(context, videoUrl, downloadFilename, hasNotificationPermission)
-                            isCurrentlyDownloading = false
+                            withContext(Dispatchers.Main) {
+                                isCurrentlyDownloading = false
+                            }
                         }
                     }
                 },
@@ -522,7 +526,7 @@ private fun VideoPlayerScreen(
             // Przycisk udostępniania
             IconButton(
                 onClick = {
-                    scope.launch {
+                    GlobalScope.launch {
                         shareVideo(context, videoUrl, videoName)
                     }
                 }

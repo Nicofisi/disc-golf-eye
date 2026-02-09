@@ -1,6 +1,7 @@
 package si.nicofi.discgolfeye.ui.screens
 
 import android.Manifest
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentValues
@@ -695,19 +696,31 @@ private suspend fun downloadToGallery(
         }
 
         withContext(Dispatchers.Main) {
-            if (canNotify) {
-                builder.setContentText("Pobrano!")
-                    .setProgress(0, 0, false)
-                    .setOngoing(false)
-                    .setAutoCancel(true)
-                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                safeNotify(context, notificationManager, notificationId, builder)
+            // Anuluj powiadomienie z postępem
+            notificationManager.cancel(notificationId)
 
-                // Zamknij powiadomienie po 2 sekundach
-                kotlinx.coroutines.GlobalScope.launch {
-                    delay(2000)
-                    notificationManager.cancel(notificationId)
+            if (canNotify) {
+                // Utwórz NOWE powiadomienie o zakończeniu (nie modyfikuj starego)
+                val openGalleryIntent = Intent(Intent.ACTION_VIEW).apply {
+                    type = "video/*"
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    notificationId,
+                    openGalleryIntent,
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val doneBuilder = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentTitle("Pobrano: $filename")
+                    .setContentText("Kliknij aby otworzyć galerię")
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+                safeNotify(context, notificationManager, notificationId + 1000, doneBuilder)
             }
             Toast.makeText(context, "Zapisano: $filename", Toast.LENGTH_SHORT).show()
         }

@@ -700,9 +700,14 @@ private suspend fun downloadToGallery(
                     .setProgress(0, 0, false)
                     .setOngoing(false)
                     .setAutoCancel(true)
-                    .setTimeoutAfter(3000) // Zamknij po 3 sekundach
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 safeNotify(context, notificationManager, notificationId, builder)
+
+                // Zamknij powiadomienie po 2 sekundach
+                kotlinx.coroutines.GlobalScope.launch {
+                    delay(2000)
+                    notificationManager.cancel(notificationId)
+                }
             }
             Toast.makeText(context, "Zapisano: $filename", Toast.LENGTH_SHORT).show()
         }

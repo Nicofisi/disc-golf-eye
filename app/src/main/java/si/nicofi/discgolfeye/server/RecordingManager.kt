@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.os.Environment
 import android.util.Log
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
@@ -29,7 +32,7 @@ class RecordingManager(private val context: Context) {
     private var activeRecording: Recording? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var currentRecordingFile: File? = null
-    private var currentLensType: CameraLensType = CameraLensType.BACK_DEFAULT
+    private var currentCameraId: String? = null
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val thumbnailExecutor = Executors.newSingleThreadExecutor()
@@ -37,11 +40,14 @@ class RecordingManager(private val context: Context) {
 
     private val cameraPreferences = CameraPreferences(context)
 
+    // Lista wykrytych kamer
+    private var availableCameras: List<CameraInfo> = emptyList()
+
     val isRecording: Boolean
         get() = activeRecording != null
 
-    val currentCamera: CameraLensType
-        get() = currentLensType
+    val currentCamera: CameraInfo?
+        get() = availableCameras.find { it.id == currentCameraId }
 
     val recordingsDir: File by lazy {
         File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "DiscGolfEye").apply {
@@ -49,29 +55,42 @@ class RecordingManager(private val context: Context) {
         }
     }
 
-    fun getAvailableCameras(): List<CameraLensType> {
-        // Zwróć wszystkie typy - nieobsługiwane spadną do domyślnej przy próbie użycia
-        return CameraLensType.entries.toList()
-    }
+    fun getAvailableCameras(): List<CameraInfo> = availableCameras
 
     fun initialize(lifecycleOwner: LifecycleOwner, onReady: () -> Unit) {
+        // Wykryj dostępne kamery
+        availableCameras = CameraInfo.detectCameras(context)
+        Log.d(TAG, "Detected cameras: ${availableCameras.map { "${it.id}: ${it.displayName}" }}")
+
         // Wczytaj zapisaną preferencję kamery
-        currentLensType = cameraPreferences.getSelectedLensType()
+        val savedCameraId = cameraPreferences.selectedCameraId
+
+        // Jeśli zapisana kamera nie jest dostępna, użyj pierwszej tylnej
+        currentCameraId = if (savedCameraId != null && availableCameras.any { it.id == savedCameraId }) {
+            savedCameraId
+        } else {
+            availableCameras.firstOrNull { !it.isFront }?.id ?: availableCameras.firstOrNull()?.id
+        }
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             cameraProvider = cameraProviderFuture.get()
 
-            bindCamera(lifecycleOwner, currentLensType, onReady)
+            currentCameraId?.let { cameraId ->
+                bindCamera(lifecycleOwner, cameraId, onReady)
+            } ?: run {
+                Log.e(TAG, "No camera available")
+            }
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun bindCamera(lifecycleOwner: LifecycleOwner, lensType: CameraLensType, onReady: () -> Unit) {
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun bindCamera(lifecycleOwner: LifecycleOwner, cameraId: String, onReady: () -> Unit) {
         val recorder = Recorder.Builder()
             .setQualitySelector(
                 QualitySelector.from(
-                    Quality.HD, // 720p - dobry kompromis między jakością a zużyciem baterii
+                    Quality.HD,
                     FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
                 )
             )
@@ -80,21 +99,21 @@ class RecordingManager(private val context: Context) {
 
         videoCapture = VideoCapture.withOutput(recorder)
 
-        val cameraSelector = when (lensType) {
-            CameraLensType.FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
-            CameraLensType.BACK_DEFAULT -> CameraSelector.DEFAULT_BACK_CAMERA
-            CameraLensType.BACK_WIDE -> {
-                // Próbuj szerokokątną - jeśli nie ma, fallback do domyślnej
-                try {
-                    CameraSelector.Builder()
-                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                        .build()
-                } catch (e: Exception) {
-                    CameraSelector.DEFAULT_BACK_CAMERA
+        Log.d(TAG, "Binding camera ID: $cameraId")
+
+        // Wybierz kamerę po ID
+        val cameraSelector = CameraSelector.Builder()
+            .addCameraFilter { cameraInfos ->
+                cameraInfos.filter { cameraInfo ->
+                    try {
+                        val id = Camera2CameraInfo.from(cameraInfo).cameraId
+                        id == cameraId
+                    } catch (e: Exception) {
+                        false
+                    }
                 }
             }
-            CameraLensType.BACK_TELEPHOTO -> CameraSelector.DEFAULT_BACK_CAMERA
-        }
+            .build()
 
         try {
             cameraProvider?.unbindAll()
@@ -103,15 +122,25 @@ class RecordingManager(private val context: Context) {
                 cameraSelector,
                 videoCapture
             )
-            currentLensType = lensType
-            cameraPreferences.setSelectedLensType(lensType)
-            Log.d(TAG, "Camera initialized successfully: ${lensType.displayName}")
+            currentCameraId = cameraId
+            cameraPreferences.selectedCameraId = cameraId
+            Log.d(TAG, "Camera bound successfully: $cameraId")
             onReady()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to bind camera ${lensType.displayName}, falling back to default", e)
-            // Fallback do domyślnej kamery
-            if (lensType != CameraLensType.BACK_DEFAULT) {
-                bindCamera(lifecycleOwner, CameraLensType.BACK_DEFAULT, onReady)
+            Log.e(TAG, "Failed to bind camera $cameraId: ${e.message}", e)
+            // Fallback do domyślnej tylnej kamery
+            try {
+                cameraProvider?.unbindAll()
+                cameraProvider?.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    videoCapture
+                )
+                // Znajdź ID domyślnej kamery
+                currentCameraId = availableCameras.firstOrNull { !it.isFront }?.id
+                onReady()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to bind any camera", e2)
             }
         }
     }

@@ -20,7 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import si.nicofi.discgolfeye.server.CameraLensType
+import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
 
@@ -39,8 +39,17 @@ fun ServerScreen(
 
     // Wybór kamery
     val cameraPreferences = remember { CameraPreferences(context) }
-    var selectedCamera by remember { mutableStateOf(cameraPreferences.getSelectedLensType()) }
+    val availableCameras = remember { CameraInfo.detectCameras(context) }
+    var selectedCameraId by remember {
+        mutableStateOf(
+            cameraPreferences.selectedCameraId
+                ?: availableCameras.firstOrNull { !it.isFront }?.id
+                ?: availableCameras.firstOrNull()?.id
+        )
+    }
     var showCameraDialog by remember { mutableStateOf(false) }
+
+    val selectedCamera = availableCameras.find { it.id == selectedCameraId }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -103,7 +112,7 @@ fun ServerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = selectedCamera.displayName,
+                            text = selectedCamera?.displayName ?: "Nie wybrano",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -268,7 +277,7 @@ fun ServerScreen(
             title = { Text("Wybierz kamerę") },
             text = {
                 Column {
-                    CameraLensType.entries.forEach { lensType ->
+                    availableCameras.forEach { camera ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -276,16 +285,23 @@ fun ServerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = selectedCamera == lensType,
+                                selected = selectedCameraId == camera.id,
                                 onClick = {
-                                    selectedCamera = lensType
-                                    cameraPreferences.setSelectedLensType(lensType)
+                                    selectedCameraId = camera.id
+                                    cameraPreferences.selectedCameraId = camera.id
                                     showCameraDialog = false
                                 }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(lensType.displayName)
+                            Text(camera.displayName)
                         }
+                    }
+
+                    if (availableCameras.isEmpty()) {
+                        Text(
+                            "Nie wykryto kamer",
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             },
@@ -297,3 +313,4 @@ fun ServerScreen(
         )
     }
 }
+

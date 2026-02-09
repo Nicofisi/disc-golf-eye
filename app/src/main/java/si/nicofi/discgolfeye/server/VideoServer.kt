@@ -105,27 +105,21 @@ class VideoServer(
                         val available = manager.getAvailableCameras()
                         val current = manager.currentCamera
                         call.respond(mapOf(
-                            "available" to available.map { mapOf("id" to it.name, "name" to it.displayName) },
-                            "current" to mapOf("id" to current.name, "name" to current.displayName)
+                            "available" to available.map { mapOf("id" to it.id, "name" to it.displayName) },
+                            "current" to current?.let { mapOf("id" to it.id, "name" to it.displayName) }
                         ))
                     }
 
-                    post("/camera/switch/{type}") {
-                        val typeStr = call.parameters["type"] ?: run {
-                            call.respond(HttpStatusCode.BadRequest, "Missing camera type")
-                            return@post
-                        }
-                        val lensType = try {
-                            CameraLensType.valueOf(typeStr)
-                        } catch (e: Exception) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid camera type: $typeStr")
+                    post("/camera/switch/{id}") {
+                        val cameraId = call.parameters["id"] ?: run {
+                            call.respond(HttpStatusCode.BadRequest, "Missing camera ID")
                             return@post
                         }
 
                         // Zwróć odpowiedź że zmiana jest w toku - faktyczna zmiana wymaga lifecycle
                         call.respond(mapOf(
                             "status" to "switch_requested",
-                            "requestedCamera" to lensType.displayName,
+                            "requestedCameraId" to cameraId,
                             "note" to "Camera switch requires restart of recording service"
                         ))
                     }

@@ -7,12 +7,14 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -40,6 +42,7 @@ class DownloadService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var downloadJob: Job? = null
+    private var savedFileUri: Uri? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -117,7 +120,7 @@ class DownloadService : Service() {
                     val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
                     if (progress != lastProgress) {
                         lastProgress = progress
-                        updateProgress(filename, progress)
+                        updateProgress(progress)
                     }
                 }
             }
@@ -127,9 +130,12 @@ class DownloadService : Service() {
         values.clear()
         values.put(MediaStore.Video.Media.IS_PENDING, 0)
         contentResolver.update(uri, values, null, null)
+
+        // Zapisz URI do użycia w powiadomieniu
+        savedFileUri = uri
     }
 
-    private suspend fun downloadToFile(connection: java.net.URLConnection, filename: String, contentLength: Long) {
+    private fun downloadToFile(connection: java.net.URLConnection, filename: String, contentLength: Long) {
         val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         val appDir = File(moviesDir, "DiscGolfEye")
         if (!appDir.exists()) appDir.mkdirs()
@@ -149,14 +155,17 @@ class DownloadService : Service() {
                     val progress = if (contentLength > 0) ((totalRead * 100) / contentLength).toInt() else 0
                     if (progress != lastProgress) {
                         lastProgress = progress
-                        updateProgress(filename, progress)
+                        updateProgress(progress)
                     }
                 }
             }
         }
+
+        // Zapisz URI do użycia w powiadomieniu
+        savedFileUri = FileProvider.getUriForFile(this, "${packageName}.provider", outputFile)
     }
 
-    private fun updateProgress(filename: String, progress: Int) {
+    private fun updateProgress(progress: Int) {
         val notification = createProgressNotification("$progress%", progress)
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, notification)
@@ -185,21 +194,29 @@ class DownloadService : Service() {
             .build()
 
     private fun showCompletedNotification(filename: String) {
-        val openGalleryIntent = Intent(Intent.ACTION_VIEW).apply {
-            type = "video/*"
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        val openIntent = if (savedFileUri != null) {
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(savedFileUri, "video/mp4")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+        } else {
+            Intent(Intent.ACTION_VIEW).apply {
+                type = "video/*"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
         }
+
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            openGalleryIntent,
-            PendingIntent.FLAG_IMMUTABLE
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("Pobrano: $filename")
-            .setContentText("Kliknij aby otworzyć galerię")
+            .setContentText("Kliknij aby otworzyć")
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

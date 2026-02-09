@@ -1,7 +1,5 @@
 package si.nicofi.discgolfeye.ui.screens
 
-import android.content.Context
-import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -22,22 +20,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.client.DiscGolfClient
 import si.nicofi.discgolfeye.client.DownloadService
 import si.nicofi.discgolfeye.shared.DeviceStatus
 import si.nicofi.discgolfeye.shared.VideoFileInfo
 import si.nicofi.discgolfeye.ui.components.VideoPlayer
-import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -434,8 +425,12 @@ private fun VideoPlayerScreen(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) {
-                Text("← Wróć", color = Color.White)
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Wróć",
+                    tint = Color.White
+                )
             }
 
             Text(
@@ -458,21 +453,6 @@ private fun VideoPlayerScreen(
                     tint = Color.White
                 )
             }
-
-            // Przycisk udostępniania
-            IconButton(
-                onClick = {
-                    GlobalScope.launch {
-                        shareVideo(context, videoUrl, videoName)
-                    }
-                }
-            ) {
-                Icon(
-                    Icons.Default.Share,
-                    contentDescription = "Udostępnij",
-                    tint = Color.White
-                )
-            }
         }
 
         // Player
@@ -490,42 +470,4 @@ private fun VideoPlayerScreen(
 }
 
 
-private suspend fun shareVideo(context: Context, videoUrl: String, filename: String) {
-    try {
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Przygotowywanie...", Toast.LENGTH_SHORT).show()
-        }
-
-        // Pobierz do cache
-        val cacheFile = File(context.cacheDir, filename)
-
-        withContext(Dispatchers.IO) {
-            URL(videoUrl).openStream().use { input ->
-                FileOutputStream(cacheFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-        }
-
-        // Udostępnij przez FileProvider
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            cacheFile
-        )
-
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "video/mp4"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        context.startActivity(Intent.createChooser(shareIntent, "Udostępnij nagranie"))
-
-    } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Błąd: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-}
 

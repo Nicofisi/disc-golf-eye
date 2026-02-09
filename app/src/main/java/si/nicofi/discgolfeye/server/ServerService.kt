@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -26,6 +27,7 @@ class ServerService : Service(), LifecycleOwner {
 
     private var videoServer: VideoServer? = null
     private var recordingManager: RecordingManager? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     val isServerRunning: Boolean
         get() = videoServer?.isRunning == true
@@ -60,6 +62,16 @@ class ServerService : Service(), LifecycleOwner {
         val notification = createNotification("Uruchamianie...")
         startForeground(NOTIFICATION_ID, notification)
 
+        // WakeLock - trzymaj procesor aktywnym (ekran może się wyłączyć ale nagrywanie działa)
+        // Timeout: 4 godziny (wystarczy na długą rundę disc golfa)
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "DiscGolfEye::RecordingWakeLock"
+        ).apply {
+            acquire(4 * 60 * 60 * 1000L) // 4 godziny
+        }
+
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
 
         // Inicjalizuj RecordingManager
@@ -91,6 +103,12 @@ class ServerService : Service(), LifecycleOwner {
 
         videoServer?.stop()
         videoServer = null
+
+        // Zwolnij WakeLock
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -131,6 +149,9 @@ class ServerService : Service(), LifecycleOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         recordingManager?.release()
         videoServer?.stop()
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
         serviceScope.cancel()
     }
 

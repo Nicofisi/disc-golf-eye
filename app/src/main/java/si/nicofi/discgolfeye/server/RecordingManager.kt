@@ -88,10 +88,18 @@ class RecordingManager(private val context: Context) {
 
     @OptIn(ExperimentalCamera2Interop::class)
     private fun bindCamera(lifecycleOwner: LifecycleOwner, cameraId: String, onReady: () -> Unit) {
+        // Wybierz jakość na podstawie preferencji
+        val quality = when (cameraPreferences.videoQuality) {
+            VideoQualityOption.SD -> Quality.SD
+            VideoQualityOption.HD -> Quality.HD
+            VideoQualityOption.FHD -> Quality.FHD
+            VideoQualityOption.UHD -> Quality.UHD
+        }
+
         val recorder = Recorder.Builder()
             .setQualitySelector(
                 QualitySelector.from(
-                    Quality.HD,
+                    quality,
                     FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
                 )
             )

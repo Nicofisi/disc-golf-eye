@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
+import si.nicofi.discgolfeye.server.VideoQualityOption
 
 @Composable
 fun ServerScreen(
@@ -37,14 +38,20 @@ fun ServerScreen(
     val scope = rememberCoroutineScope()
     var isServerRunning by remember { mutableStateOf(false) }
     var isStopping by remember { mutableStateOf(false) }
-    var permissionGranted by remember {
+
+    // Uprawnienia - kamera zawsze wymagana, audio tylko gdy włączone
+    var cameraPermissionGranted by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var audioPermissionGranted by remember {
+        mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    // Wybór kamery
+    // Wybór kamery i ustawienia
     val cameraPreferences = remember { CameraPreferences(context) }
     val availableCameras = remember { CameraInfo.detectCameras(context) }
     var selectedCameraId by remember {
@@ -55,23 +62,35 @@ fun ServerScreen(
         )
     }
     var showCameraDialog by remember { mutableStateOf(false) }
+    var showQualityDialog by remember { mutableStateOf(false) }
     var recordAudio by remember { mutableStateOf(cameraPreferences.recordAudio) }
+    var selectedQuality by remember { mutableStateOf(cameraPreferences.videoQuality) }
 
     val selectedCamera = availableCameras.find { it.id == selectedCameraId }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        permissionGranted = permissions[Manifest.permission.CAMERA] == true &&
-                           permissions[Manifest.permission.RECORD_AUDIO] == true
-
-        // Jeśli uprawnienia przyznane, uruchom serwer
-        if (permissionGranted) {
+    // Launcher dla uprawnień kamery (uruchamia serwer po uzyskaniu)
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        cameraPermissionGranted = granted
+        if (granted) {
+            // Uruchom serwer
             val intent = Intent(context, ServerService::class.java).apply {
                 action = ServerService.ACTION_START_SERVER
             }
             context.startForegroundService(intent)
             isServerRunning = true
+        }
+    }
+
+    // Launcher dla uprawnień audio (tylko do włączenia audio)
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        audioPermissionGranted = granted
+        if (granted) {
+            recordAudio = true
+            cameraPreferences.recordAudio = true
         }
     }
 
@@ -156,10 +175,45 @@ fun ServerScreen(
                     }
                     Switch(
                         checked = recordAudio,
-                        onCheckedChange = {
-                            recordAudio = it
-                            cameraPreferences.recordAudio = it
+                        onCheckedChange = { enabled ->
+                            if (enabled && !audioPermissionGranted) {
+                                // Poproś o uprawnienie audio
+                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                recordAudio = enabled
+                                cameraPreferences.recordAudio = enabled
+                            }
                         }
+                    )
+                }
+            }
+
+            // Wybór jakości
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showQualityDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Jakość wideo",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = selectedQuality.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Icon(
+                        Icons.Default.HighQuality,
+                        contentDescription = "Zmień jakość"
                     )
                 }
             }
@@ -216,7 +270,7 @@ fun ServerScreen(
                 }
             } else {
                 Text(
-                    text = if (!permissionGranted) "Brak uprawnień kamery" else "Uruchom serwer aby nagrywać",
+                    text = if (!cameraPermissionGranted) "Brak uprawnień kamery" else "Uruchom serwer aby nagrywać",
                     color = Color.Gray,
                     textAlign = TextAlign.Center
                 )
@@ -249,7 +303,7 @@ fun ServerScreen(
                     )
                 }
 
-                if (!permissionGranted) {
+                if (!cameraPermissionGranted) {
                     Icon(
                         Icons.Default.Warning,
                         contentDescription = "Ostrzeżenie",
@@ -280,21 +334,16 @@ fun ServerScreen(
                         isStopping = false
                     }
                 } else if (!isServerRunning && !isStopping) {
-                    // Sprawdź uprawnienia
-                    if (permissionGranted) {
+                    // Sprawdź uprawnienia kamery
+                    if (cameraPermissionGranted) {
                         val intent = Intent(context, ServerService::class.java).apply {
                             action = ServerService.ACTION_START_SERVER
                         }
                         context.startForegroundService(intent)
                         isServerRunning = true
                     } else {
-                        // Poproś o uprawnienia
-                        permissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.CAMERA,
-                                Manifest.permission.RECORD_AUDIO
-                            )
-                        )
+                        // Poproś o uprawnienie kamery
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
                 }
             },
@@ -369,6 +418,44 @@ fun ServerScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showCameraDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
+
+    // Dialog wyboru jakości
+    if (showQualityDialog) {
+        AlertDialog(
+            onDismissRequest = { showQualityDialog = false },
+            title = { Text("Wybierz jakość wideo") },
+            text = {
+                Column {
+                    VideoQualityOption.entries.forEach { quality ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedQuality = quality
+                                    cameraPreferences.videoQuality = quality
+                                    showQualityDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedQuality == quality,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(quality.displayName)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQualityDialog = false }) {
                     Text("Anuluj")
                 }
             }

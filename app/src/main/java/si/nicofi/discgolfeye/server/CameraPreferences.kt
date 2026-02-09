@@ -17,6 +17,7 @@ class CameraPreferences(context: Context) {
         private const val PREFS_NAME = "discgolfeye_camera_prefs"
         private const val KEY_CAMERA_ID = "selected_camera_id"
         private const val KEY_RECORD_AUDIO = "record_audio"
+        private const val KEY_VIDEO_QUALITY = "video_quality"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -28,6 +29,23 @@ class CameraPreferences(context: Context) {
     var recordAudio: Boolean
         get() = prefs.getBoolean(KEY_RECORD_AUDIO, true) // domyślnie z dźwiękiem
         set(value) = prefs.edit().putBoolean(KEY_RECORD_AUDIO, value).apply()
+
+    var videoQuality: VideoQualityOption
+        get() = VideoQualityOption.fromName(prefs.getString(KEY_VIDEO_QUALITY, VideoQualityOption.HD.name))
+        set(value) = prefs.edit().putString(KEY_VIDEO_QUALITY, value.name).apply()
+}
+
+enum class VideoQualityOption(val displayName: String, val shortName: String) {
+    SD("480p (SD)", "480p"),
+    HD("720p (HD)", "720p"),
+    FHD("1080p (Full HD)", "1080p"),
+    UHD("4K (Ultra HD)", "4K");
+
+    companion object {
+        fun fromName(name: String?): VideoQualityOption {
+            return entries.find { it.name == name } ?: HD
+        }
+    }
 }
 
 /**

@@ -1,18 +1,23 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import si.nicofi.discgolfeye.server.ServerService
 
 @Composable
 fun ServerScreen(
     modifier: Modifier = Modifier
 ) {
-    var serverStatus by remember { mutableStateOf("Zatrzymany") }
+    val context = LocalContext.current
     var isServerRunning by remember { mutableStateOf(false) }
+
+    val serverStatus = if (isServerRunning) "Działa na :${ServerService.PORT}" else "Zatrzymany"
 
     Column(
         modifier = modifier
@@ -52,9 +57,15 @@ fun ServerScreen(
 
         Button(
             onClick = {
-                // TODO: Uruchom/zatrzymaj serwer
+                val intent = Intent(context, ServerService::class.java).apply {
+                    action = if (isServerRunning) {
+                        ServerService.ACTION_STOP_SERVER
+                    } else {
+                        ServerService.ACTION_START_SERVER
+                    }
+                }
+                context.startForegroundService(intent)
                 isServerRunning = !isServerRunning
-                serverStatus = if (isServerRunning) "Działa na :8080" else "Zatrzymany"
             },
             modifier = Modifier
                 .fillMaxWidth()

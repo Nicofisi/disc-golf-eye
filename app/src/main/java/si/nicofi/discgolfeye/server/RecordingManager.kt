@@ -249,8 +249,29 @@ class RecordingManager(private val context: Context) {
 
     fun release() {
         stopRecording()
-        cameraExecutor.shutdown()
-        thumbnailExecutor.shutdown()
-        cameraProvider?.unbindAll()
+
+        // Najpierw unbind kamery
+        try {
+            cameraProvider?.unbindAll()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unbinding camera", e)
+        }
+
+        // Poczekaj chwilę żeby CameraX dokończyła operacje, potem zamknij executory
+        // Używamy shutdownNow() z opóźnieniem zamiast shutdown() które czeka w nieskończoność
+        try {
+            // Daj CameraX 2 sekundy na dokończenie
+            Thread {
+                try {
+                    Thread.sleep(2000)
+                    cameraExecutor.shutdownNow()
+                    thumbnailExecutor.shutdownNow()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error shutting down executors", e)
+                }
+            }.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scheduling executor shutdown", e)
+        }
     }
 }

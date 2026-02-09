@@ -96,6 +96,15 @@ class ServerService : Service(), LifecycleOwner {
     }
 
     private fun stopServer() {
+        // Najpierw zatrzymaj serwer HTTP
+        videoServer?.stop()
+        videoServer = null
+
+        // Potem zwolnij kamerę (z opóźnieniem zamykania executorów)
+        recordingManager?.release()
+        recordingManager = null
+
+        // Lifecycle
         try {
             if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.CREATED)) {
                 lifecycleRegistry.currentState = Lifecycle.State.CREATED
@@ -103,12 +112,6 @@ class ServerService : Service(), LifecycleOwner {
         } catch (e: Exception) {
             // Ignoruj błędy lifecycle przy zamykaniu
         }
-
-        recordingManager?.release()
-        recordingManager = null
-
-        videoServer?.stop()
-        videoServer = null
 
         // Zwolnij WakeLock
         wakeLock?.let {

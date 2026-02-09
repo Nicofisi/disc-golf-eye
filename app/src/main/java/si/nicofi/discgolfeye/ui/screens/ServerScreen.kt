@@ -1,13 +1,23 @@
 package si.nicofi.discgolfeye.ui.screens
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import si.nicofi.discgolfeye.server.ServerService
 
 @Composable
@@ -16,69 +26,182 @@ fun ServerScreen(
 ) {
     val context = LocalContext.current
     var isServerRunning by remember { mutableStateOf(false) }
+    var permissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        permissionGranted = permissions[Manifest.permission.CAMERA] == true &&
+                           permissions[Manifest.permission.RECORD_AUDIO] == true
+
+        // Jeśli uprawnienia przyznane, uruchom serwer
+        if (permissionGranted) {
+            val intent = Intent(context, ServerService::class.java).apply {
+                action = ServerService.ACTION_START_SERVER
+            }
+            context.startForegroundService(intent)
+            isServerRunning = true
+        }
+    }
 
     val serverStatus = if (isServerRunning) "Działa na :${ServerService.PORT}" else "Zatrzymany"
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "📹 Tryb Kamery",
             style = MaterialTheme.typography.headlineMedium
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
+        // Status kamery - duży box zamiast podglądu
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            if (isServerRunning) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Status nagrywania
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Color.Red.copy(alpha = 0.8f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = "● REC",
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "Kamera nagrywa w tle.\nMożesz teraz włożyć telefon do plecaka.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Połącz się z drugim telefonem\nprzez Hotspot Wi-Fi",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
                 Text(
-                    text = "Status serwera:",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = serverStatus,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = if (isServerRunning) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.error
+                    text = if (!permissionGranted) "Brak uprawnień kamery" else "Uruchom serwer aby nagrywać",
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                val intent = Intent(context, ServerService::class.java).apply {
-                    action = if (isServerRunning) {
-                        ServerService.ACTION_STOP_SERVER
-                    } else {
-                        ServerService.ACTION_START_SERVER
-                    }
-                }
-                context.startForegroundService(intent)
-                isServerRunning = !isServerRunning
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
+        // Status
+        Card(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Status serwera:",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = serverStatus,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isServerRunning) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.error
+                    )
+                }
+
+                if (!permissionGranted) {
+                    Text(
+                        text = "⚠️",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        Button(
+            onClick = {
+                if (isServerRunning) {
+                    // Zatrzymaj serwer
+                    val intent = Intent(context, ServerService::class.java).apply {
+                        action = ServerService.ACTION_STOP_SERVER
+                    }
+                    context.startService(intent)
+                    isServerRunning = false
+                } else {
+                    // Sprawdź uprawnienia
+                    if (permissionGranted) {
+                        val intent = Intent(context, ServerService::class.java).apply {
+                            action = ServerService.ACTION_START_SERVER
+                        }
+                        context.startForegroundService(intent)
+                        isServerRunning = true
+                    } else {
+                        // Poproś o uprawnienia
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.CAMERA,
+                                Manifest.permission.RECORD_AUDIO
+                            )
+                        )
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = if (isServerRunning) {
+                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            } else {
+                ButtonDefaults.buttonColors()
+            }
+        ) {
+            Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
-            text = "Włącz Hotspot Wi-Fi na tym telefonie,\na następnie uruchom serwer.",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Włącz Hotspot Wi-Fi, uruchom serwer i połącz drugi telefon.",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

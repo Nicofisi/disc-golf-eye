@@ -9,21 +9,29 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import si.nicofi.discgolfeye.R
 
-class ServerService : Service() {
+class ServerService : Service(), LifecycleOwner {
 
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private lateinit var lifecycleRegistry: LifecycleRegistry
 
     private var videoServer: VideoServer? = null
+    private var recordingManager: RecordingManager? = null
 
     val isServerRunning: Boolean
         get() = videoServer?.isRunning == true
+
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
 
     inner class LocalBinder : Binder() {
         fun getService(): ServerService = this@ServerService
@@ -33,6 +41,8 @@ class ServerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        lifecycleRegistry = LifecycleRegistry(this)
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
         createNotificationChannel()
     }
 
@@ -47,17 +57,41 @@ class ServerService : Service() {
     private fun startServer() {
         if (videoServer?.isRunning == true) return
 
-        val notification = createNotification()
+        val notification = createNotification("Uruchamianie...")
         startForeground(NOTIFICATION_ID, notification)
 
-        videoServer = VideoServer(PORT).also {
+        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+
+        // Inicjalizuj RecordingManager
+        recordingManager = RecordingManager(this).apply {
+            initialize(this@ServerService) {
+                // Kamera gotowa - automatycznie startuj nagrywanie
+                startRecording(serviceScope)
+                updateNotification("Nagrywanie na porcie $PORT")
+            }
+        }
+
+        // Uruchom serwer HTTP
+        videoServer = VideoServer(
+            context = this,
+            port = PORT,
+            getRecordingManager = { recordingManager }
+        ).also {
             it.start(serviceScope)
         }
+
+        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
 
     private fun stopServer() {
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+
+        recordingManager?.release()
+        recordingManager = null
+
         videoServer?.stop()
         videoServer = null
+
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -77,17 +111,25 @@ class ServerService : Service() {
         }
     }
 
-    private fun createNotification(): Notification {
+    private fun createNotification(text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("DiscGolfEye")
-            .setContentText("Serwer kamery działa na porcie $PORT")
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .build()
     }
 
+    private fun updateNotification(text: String) {
+        val notification = createNotification(text)
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        recordingManager?.release()
         videoServer?.stop()
         serviceScope.cancel()
     }

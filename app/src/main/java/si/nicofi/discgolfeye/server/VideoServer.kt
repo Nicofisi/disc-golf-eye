@@ -18,32 +18,11 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
+import si.nicofi.discgolfeye.shared.DeviceStatus
+import si.nicofi.discgolfeye.shared.PingResponse
+import si.nicofi.discgolfeye.shared.VideoFileInfo
 import java.io.File
 
-@Serializable
-data class PingResponse(
-    val status: String = "ok",
-    val message: String = "DiscGolfEye Server is running"
-)
-
-@Serializable
-data class DeviceStatus(
-    val state: String,
-    val batteryLevel: Int,
-    val batteryTemp: Float,
-    val storageFreeGb: Float,
-    val isRecording: Boolean,
-    val uptimeSeconds: Long
-)
-
-@Serializable
-data class VideoFileInfo(
-    val filename: String,
-    val timestamp: Long,
-    val sizeMb: Float,
-    val videoUrl: String
-)
 
 class VideoServer(
     private val context: Context,

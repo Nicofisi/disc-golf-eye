@@ -12,6 +12,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
@@ -25,10 +26,23 @@ fun VideoPlayer(
     val context = LocalContext.current
 
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-            repeatMode = Player.REPEAT_MODE_OFF
-        }
+        // Zmniejszony bufor dla szybszego startu
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                1000,  // minBufferMs - minimum bufora (1 sekunda)
+                5000,  // maxBufferMs - maksimum bufora (5 sekund)
+                500,   // bufferForPlaybackMs - ile zabuforować przed startem (0.5 sekundy)
+                1000   // bufferForPlaybackAfterRebufferMs - po rebuffer (1 sekunda)
+            )
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .build()
+            .apply {
+                playWhenReady = true
+                repeatMode = Player.REPEAT_MODE_OFF
+            }
     }
 
     DisposableEffect(videoUrl) {

@@ -17,9 +17,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import si.nicofi.discgolfeye.client.DeviceStatus
 import si.nicofi.discgolfeye.client.DiscGolfClient
-import si.nicofi.discgolfeye.client.VideoFileInfo
+import si.nicofi.discgolfeye.shared.DeviceStatus
+import si.nicofi.discgolfeye.shared.VideoFileInfo
 import si.nicofi.discgolfeye.ui.components.VideoPlayer
 import java.text.SimpleDateFormat
 import java.util.*

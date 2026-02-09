@@ -9,31 +9,9 @@ import io.ktor.client.engine.android.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class PingResponse(
-    val status: String,
-    val message: String
-)
-
-@Serializable
-data class VideoFileInfo(
-    val filename: String,
-    val timestamp: Long,
-    val sizeMb: Float,
-    val videoUrl: String
-)
-
-@Serializable
-data class DeviceStatus(
-    val state: String,
-    val batteryLevel: Int,
-    val batteryTemp: Float,
-    val storageFreeGb: Float,
-    val isRecording: Boolean,
-    val uptimeSeconds: Long
-)
+import si.nicofi.discgolfeye.shared.DeviceStatus
+import si.nicofi.discgolfeye.shared.PingResponse
+import si.nicofi.discgolfeye.shared.VideoFileInfo
 
 class DiscGolfClient {
 

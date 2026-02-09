@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,10 +59,20 @@ fun ServerScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "📹 Tryb Kamery",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Videocam,
+                contentDescription = "Kamera",
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Tryb Kamery",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -147,9 +159,11 @@ fun ServerScreen(
                 }
 
                 if (!permissionGranted) {
-                    Text(
-                        text = "⚠️",
-                        style = MaterialTheme.typography.headlineMedium
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Ostrzeżenie",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }

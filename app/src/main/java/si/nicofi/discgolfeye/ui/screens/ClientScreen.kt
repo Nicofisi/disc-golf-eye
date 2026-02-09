@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -102,10 +105,20 @@ fun ClientScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "👁️ Tryb Oglądacza",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Visibility,
+                contentDescription = "Oglądacz",
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Tryb Oglądacza",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -234,7 +247,9 @@ fun ClientScreen(
                         }
                     }
                 ) {
-                    Text("🔄 Odśwież")
+                    Icon(Icons.Default.Refresh, contentDescription = "Odśwież")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Odśwież")
                 }
             }
 
@@ -363,9 +378,11 @@ private fun VideoItem(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(
-                        text = "🎬",
-                        style = MaterialTheme.typography.headlineMedium
+                    Icon(
+                        Icons.Default.Videocam,
+                        contentDescription = "Video",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
@@ -388,9 +405,11 @@ private fun VideoItem(
             }
 
             // Play button
-            Text(
-                text = "▶️",
-                style = MaterialTheme.typography.headlineLarge
+            Icon(
+                Icons.Default.PlayCircle,
+                contentDescription = "Odtwórz",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(40.dp)
             )
         }
     }
@@ -405,6 +424,7 @@ private fun VideoPlayerScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var isCurrentlyDownloading by remember { mutableStateOf(false) }
 
     // Sprawdź uprawnienia do powiadomień (Android 13+)
     var hasNotificationPermission by remember {
@@ -418,12 +438,23 @@ private fun VideoPlayerScreen(
         )
     }
 
+    // Nazwa pliku z datą
+    val downloadFilename = remember(videoName) {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd_", Locale.getDefault())
+        val date = dateFormat.format(Date())
+        "$date$videoName"
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasNotificationPermission = isGranted
-        scope.launch {
-            downloadToGallery(context, videoUrl, videoName, isGranted)
+        if (!isDownloading()) {
+            isCurrentlyDownloading = true
+            scope.launch {
+                downloadToGallery(context, videoUrl, downloadFilename, isGranted)
+                isCurrentlyDownloading = false
+            }
         }
     }
 
@@ -456,16 +487,35 @@ private fun VideoPlayerScreen(
             // Przycisk pobierania
             IconButton(
                 onClick = {
+                    if (isDownloading() || isCurrentlyDownloading) {
+                        Toast.makeText(context, "Trwa już pobieranie...", Toast.LENGTH_SHORT).show()
+                        return@IconButton
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
+                        isCurrentlyDownloading = true
                         scope.launch {
-                            downloadToGallery(context, videoUrl, videoName, hasNotificationPermission)
+                            downloadToGallery(context, videoUrl, downloadFilename, hasNotificationPermission)
+                            isCurrentlyDownloading = false
                         }
                     }
-                }
+                },
+                enabled = !isCurrentlyDownloading
             ) {
-                Text("⬇️", style = MaterialTheme.typography.headlineSmall)
+                if (isCurrentlyDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "Pobierz",
+                        tint = Color.White
+                    )
+                }
             }
 
             // Przycisk udostępniania
@@ -476,7 +526,11 @@ private fun VideoPlayerScreen(
                     }
                 }
             ) {
-                Text("📤", style = MaterialTheme.typography.headlineSmall)
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = "Udostępnij",
+                    tint = Color.White
+                )
             }
         }
 
@@ -495,11 +549,14 @@ private fun VideoPlayerScreen(
 }
 
 private const val DOWNLOAD_CHANNEL_ID = "discgolfeye_download"
+private var currentDownloadId: Int? = null
 private var nextNotificationId = 1001
 
 private fun getNextNotificationId(): Int {
     return nextNotificationId++
 }
+
+private fun isDownloading(): Boolean = currentDownloadId != null
 
 private fun canShowNotification(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -642,6 +699,8 @@ private suspend fun downloadToGallery(
                 builder.setContentText("Pobrano!")
                     .setProgress(0, 0, false)
                     .setOngoing(false)
+                    .setAutoCancel(true)
+                    .setTimeoutAfter(3000) // Zamknij po 3 sekundach
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 safeNotify(context, notificationManager, notificationId, builder)
             }

@@ -1,6 +1,8 @@
 package si.nicofi.discgolfeye.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,8 +23,17 @@ fun RoleSelectionScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        Icon(
+            Icons.Default.SportsGolf,
+            contentDescription = "Disc Golf",
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
-            text = "🥏 Disc Golf Eye",
+            text = "Disc Golf Eye",
             style = MaterialTheme.typography.headlineLarge,
             textAlign = TextAlign.Center
         )
@@ -43,8 +54,10 @@ fun RoleSelectionScreen(
                 .fillMaxWidth()
                 .height(80.dp)
         ) {
+            Icon(Icons.Default.Videocam, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("📹 Jestem Kamerą", style = MaterialTheme.typography.titleMedium)
+                Text("Jestem Kamerą", style = MaterialTheme.typography.titleMedium)
                 Text("(Telefon w plecaku)", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -57,8 +70,10 @@ fun RoleSelectionScreen(
                 .fillMaxWidth()
                 .height(80.dp)
         ) {
+            Icon(Icons.Default.Visibility, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("👁️ Jestem Oglądaczem", style = MaterialTheme.typography.titleMedium)
+                Text("Jestem Oglądaczem", style = MaterialTheme.typography.titleMedium)
                 Text("(Telefon w ręce)", style = MaterialTheme.typography.bodySmall)
             }
         }

@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.util.SizeF
+import kotlin.math.atan
+import kotlin.math.sqrt
 
 /**
  * Przechowuje preferencje kamery (która kamera była ostatnio używana)
@@ -29,7 +32,8 @@ data class CameraInfo(
     val id: String,
     val displayName: String,
     val isFront: Boolean,
-    val focalLength: Float
+    val focalLength: Float,
+    val fovDegrees: Float // Kąt widzenia w stopniach
 ) {
     companion object {
         fun detectCameras(context: Context): List<CameraInfo> {
@@ -43,28 +47,55 @@ data class CameraInfo(
                     val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
                     val focalLength = focalLengths?.firstOrNull() ?: 0f
 
+                    // Oblicz kąt widzenia (FOV) na podstawie rozmiaru sensora
+                    val sensorSize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+                    val fovDegrees = calculateFOV(focalLength, sensorSize)
+
                     val isFront = lensFacing == CameraCharacteristics.LENS_FACING_FRONT
 
-                    // Stwórz czytelną nazwę z ogniskową
+                    // Stwórz czytelną nazwę z kątem widzenia
+                    val fovLabel = when {
+                        fovDegrees >= 100 -> "ultrawide"
+                        fovDegrees >= 75 -> "wide"
+                        fovDegrees >= 50 -> "standard"
+                        fovDegrees > 0 -> "tele"
+                        else -> "${focalLength.format()}mm"
+                    }
+
                     val displayName = if (isFront) {
-                        "Przednia ${focalLength.format()}mm"
+                        "Przednia ($fovLabel, ${fovDegrees.toInt()}°)"
                     } else {
-                        "Tylna ${focalLength.format()}mm"
+                        "Tylna ($fovLabel, ${fovDegrees.toInt()}°)"
                     }
 
                     cameras.add(CameraInfo(
                         id = cameraId,
                         displayName = displayName,
                         isFront = isFront,
-                        focalLength = focalLength
+                        focalLength = focalLength,
+                        fovDegrees = fovDegrees
                     ))
                 }
             } catch (e: Exception) {
                 // Fallback
             }
 
-            // Sortuj: tylne po focal length (od największej = szerokokątna), przednia na końcu
-            return cameras.sortedWith(compareBy({ it.isFront }, { -it.focalLength }))
+            // Sortuj: tylne po FOV (od największego = szerokokątna), przednia na końcu
+            return cameras.sortedWith(compareBy({ it.isFront }, { -it.fovDegrees }))
+        }
+
+        private fun calculateFOV(focalLength: Float, sensorSize: SizeF?): Float {
+            if (focalLength <= 0 || sensorSize == null) return 0f
+
+            // Oblicz przekątną sensora
+            val diagonalMm = sqrt(
+                sensorSize.width * sensorSize.width +
+                sensorSize.height * sensorSize.height
+            )
+
+            // FOV = 2 * arctan(d / 2f) gdzie d = przekątna sensora, f = ogniskowa
+            val fovRadians = 2 * atan((diagonalMm / (2 * focalLength)).toDouble())
+            return Math.toDegrees(fovRadians).toFloat()
         }
 
         private fun Float.format(): String = if (this == this.toLong().toFloat()) {

@@ -21,8 +21,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
@@ -228,21 +230,26 @@ fun ServerScreen(
 
         Button(
             onClick = {
-                if (isServerRunning) {
-                    // Zatrzymaj serwer
+                if (isServerRunning && !isStopping) {
+                    // Zatrzymaj serwer - najpierw pokaż spinner
                     isStopping = true
-                    val intent = Intent(context, ServerService::class.java).apply {
-                        action = ServerService.ACTION_STOP_SERVER
-                    }
-                    context.startService(intent)
 
-                    // Poczekaj na zatrzymanie
                     scope.launch {
-                        delay(2500) // CameraX potrzebuje ~2s na zamknięcie
+                        // Małe opóźnienie żeby UI się odświeżyło przed blokowaniem
+                        delay(50)
+
+                        // Wyślij intent
+                        val intent = Intent(context, ServerService::class.java).apply {
+                            action = ServerService.ACTION_STOP_SERVER
+                        }
+                        context.startService(intent)
+
+                        // Poczekaj na zatrzymanie
+                        delay(2000)
                         isServerRunning = false
                         isStopping = false
                     }
-                } else {
+                } else if (!isServerRunning && !isStopping) {
                     // Sprawdź uprawnienia
                     if (permissionGranted) {
                         val intent = Intent(context, ServerService::class.java).apply {
@@ -265,7 +272,7 @@ fun ServerScreen(
                 .fillMaxWidth()
                 .height(56.dp),
             enabled = !isStopping,
-            colors = if (isServerRunning) {
+            colors = if (isServerRunning || isStopping) {
                 ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             } else {
                 ButtonDefaults.buttonColors()

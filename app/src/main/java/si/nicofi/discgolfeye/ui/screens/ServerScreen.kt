@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
@@ -29,7 +32,9 @@ fun ServerScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isServerRunning by remember { mutableStateOf(false) }
+    var isStopping by remember { mutableStateOf(false) }
     var permissionGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
@@ -225,11 +230,18 @@ fun ServerScreen(
             onClick = {
                 if (isServerRunning) {
                     // Zatrzymaj serwer
+                    isStopping = true
                     val intent = Intent(context, ServerService::class.java).apply {
                         action = ServerService.ACTION_STOP_SERVER
                     }
                     context.startService(intent)
-                    isServerRunning = false
+
+                    // Poczekaj na zatrzymanie
+                    scope.launch {
+                        delay(2500) // CameraX potrzebuje ~2s na zamknięcie
+                        isServerRunning = false
+                        isStopping = false
+                    }
                 } else {
                     // Sprawdź uprawnienia
                     if (permissionGranted) {
@@ -252,13 +264,24 @@ fun ServerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
+            enabled = !isStopping,
             colors = if (isServerRunning) {
                 ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             } else {
                 ButtonDefaults.buttonColors()
             }
         ) {
-            Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
+            if (isStopping) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Zatrzymywanie...")
+            } else {
+                Text(if (isServerRunning) "Zatrzymaj serwer" else "Uruchom serwer")
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -281,16 +304,18 @@ fun ServerScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedCameraId == camera.id,
-                                onClick = {
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
                                     selectedCameraId = camera.id
                                     cameraPreferences.selectedCameraId = camera.id
                                     showCameraDialog = false
                                 }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedCameraId == camera.id,
+                                onClick = null // onClick obsługiwany przez Row
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(camera.displayName)

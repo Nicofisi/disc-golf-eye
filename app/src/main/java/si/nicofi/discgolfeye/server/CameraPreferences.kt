@@ -45,9 +45,9 @@ data class CameraInfo(
 
                     val isFront = lensFacing == CameraCharacteristics.LENS_FACING_FRONT
 
-                    // Stwórz czytelną nazwę
+                    // Stwórz czytelną nazwę z ogniskową
                     val displayName = if (isFront) {
-                        "Przednia"
+                        "Przednia ${focalLength.format()}mm"
                     } else {
                         "Tylna ${focalLength.format()}mm"
                     }

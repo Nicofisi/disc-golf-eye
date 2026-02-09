@@ -1,0 +1,40 @@
+# Android/Gradle
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Generated files
+bin/
+gen/
+
+# Gradle
+.gradle/
+**/build/
+
+# Local configuration
+local.properties
+
+# Log files
+*.log
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+/out/
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# NDK
+obj/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

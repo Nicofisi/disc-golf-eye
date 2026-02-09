@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import si.nicofi.discgolfeye.server.CameraInfo
 import si.nicofi.discgolfeye.server.CameraPreferences
 import si.nicofi.discgolfeye.server.ServerService
+import si.nicofi.discgolfeye.server.StorageLimitOption
 import si.nicofi.discgolfeye.server.VideoQualityOption
 
 @Composable
@@ -63,8 +64,10 @@ fun ServerScreen(
     }
     var showCameraDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
+    var showStorageLimitDialog by remember { mutableStateOf(false) }
     var recordAudio by remember { mutableStateOf(cameraPreferences.recordAudio) }
     var selectedQuality by remember { mutableStateOf(cameraPreferences.videoQuality) }
+    var selectedStorageLimit by remember { mutableStateOf(cameraPreferences.storageLimit) }
 
     val selectedCamera = availableCameras.find { it.id == selectedCameraId }
 
@@ -214,6 +217,36 @@ fun ServerScreen(
                     Icon(
                         Icons.Default.HighQuality,
                         contentDescription = "Zmień jakość"
+                    )
+                }
+            }
+
+            // Wybór limitu czasu
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showStorageLimitDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Limit nagrań",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = selectedStorageLimit.displayName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Icon(
+                        Icons.Default.Storage,
+                        contentDescription = "Zmień limit"
                     )
                 }
             }
@@ -456,6 +489,50 @@ fun ServerScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showQualityDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
+
+    // Dialog wyboru limitu czasu
+    if (showStorageLimitDialog) {
+        AlertDialog(
+            onDismissRequest = { showStorageLimitDialog = false },
+            title = { Text("Limit nagrań") },
+            text = {
+                Column {
+                    Text(
+                        text = "Ile nagrań przechowywać na telefonie-kamerze?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    StorageLimitOption.entries.forEach { limit ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedStorageLimit = limit
+                                    cameraPreferences.storageLimit = limit
+                                    showStorageLimitDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedStorageLimit == limit,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(limit.displayName)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStorageLimitDialog = false }) {
                     Text("Anuluj")
                 }
             }

@@ -26,7 +26,6 @@ class RecordingManager(private val context: Context) {
     companion object {
         private const val TAG = "RecordingManager"
         private const val CHUNK_DURATION_MS = 60_000L // 1 minuta
-        private const val MAX_FILES = 30 // Maksymalnie 30 plików (30 minut)
     }
 
     private var videoCapture: VideoCapture<Recorder>? = null
@@ -247,11 +246,24 @@ class RecordingManager(private val context: Context) {
     }
 
     private fun cleanupOldFiles() {
+        val limitMinutes = cameraPreferences.storageLimit.minutes
+        if (limitMinutes == Int.MAX_VALUE) {
+            // Bez limitu
+            return
+        }
+
         val starred = getStarredFilenames()
-        val files = getVideoFiles().filter { !starred.contains(it.name) }
-        if (files.size > MAX_FILES) {
-            files.drop(MAX_FILES).forEach { file ->
-                Log.d(TAG, "Deleting old file: ${file.name}")
+        val files = getVideoFiles()
+            .filter { !starred.contains(it.name) }
+            .sortedByDescending { it.lastModified() } // Najnowsze pierwsze
+
+        // Każdy plik to ~1 minuta (CHUNK_DURATION_MS)
+        // Liczymy ile plików możemy trzymać
+        val maxFiles = limitMinutes // 1 plik = 1 minuta
+
+        if (files.size > maxFiles) {
+            files.drop(maxFiles).forEach { file ->
+                Log.d(TAG, "Deleting old file (limit: ${limitMinutes}min): ${file.name}")
                 file.delete()
                 // Usuń też miniaturkę
                 getThumbnailFile(file)?.delete()

@@ -18,6 +18,7 @@ class CameraPreferences(context: Context) {
         private const val KEY_CAMERA_ID = "selected_camera_id"
         private const val KEY_RECORD_AUDIO = "record_audio"
         private const val KEY_VIDEO_QUALITY = "video_quality"
+        private const val KEY_STORAGE_LIMIT = "storage_limit"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -33,6 +34,27 @@ class CameraPreferences(context: Context) {
     var videoQuality: VideoQualityOption
         get() = VideoQualityOption.fromName(prefs.getString(KEY_VIDEO_QUALITY, VideoQualityOption.HD.name))
         set(value) = prefs.edit().putString(KEY_VIDEO_QUALITY, value.name).apply()
+
+    var storageLimit: StorageLimitOption
+        get() = StorageLimitOption.fromName(prefs.getString(KEY_STORAGE_LIMIT, StorageLimitOption.MIN_30.name))
+        set(value) = prefs.edit().putString(KEY_STORAGE_LIMIT, value.name).apply()
+}
+
+enum class StorageLimitOption(val displayName: String, val minutes: Int) {
+    MIN_5("5 minut", 5),
+    MIN_15("15 minut", 15),
+    MIN_30("30 minut", 30),
+    HOUR_1("1 godzina", 60),
+    HOUR_2("2 godziny", 120),
+    HOUR_4("4 godziny", 240),
+    HOUR_8("8 godzin", 480),
+    UNLIMITED("Bez limitu", Int.MAX_VALUE);
+
+    companion object {
+        fun fromName(name: String?): StorageLimitOption {
+            return entries.find { it.name == name } ?: MIN_30
+        }
+    }
 }
 
 enum class VideoQualityOption(val displayName: String, val shortName: String) {

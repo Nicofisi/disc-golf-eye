@@ -80,6 +80,27 @@ class DiscGolfClient {
         return "$baseUrl/stream/$filename"
     }
 
+    suspend fun toggleStar(filename: String): Result<Boolean> {
+        val baseUrl = getServerBaseUrl() ?: return Result.failure(Exception("Not connected"))
+        return try {
+            val response: Map<String, Any> = httpClient.post("$baseUrl/video/$filename/star").body()
+            val isStarred = response["isStarred"] as? Boolean ?: false
+            Result.success(isStarred)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteVideo(filename: String): Result<Boolean> {
+        val baseUrl = getServerBaseUrl() ?: return Result.failure(Exception("Not connected"))
+        return try {
+            httpClient.delete("$baseUrl/video/$filename")
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         httpClient.close()
     }

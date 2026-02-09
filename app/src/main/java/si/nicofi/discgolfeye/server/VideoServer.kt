@@ -137,10 +137,48 @@ class VideoServer(
                                 timestamp = file.lastModified(),
                                 sizeMb = file.length() / (1024f * 1024f),
                                 videoUrl = "/stream/${file.name}",
-                                thumbUrl = if (hasThumb) "/thumb/${file.nameWithoutExtension}.jpg" else null
+                                thumbUrl = if (hasThumb) "/thumb/${file.nameWithoutExtension}.jpg" else null,
+                                isStarred = manager.isStarred(file.name)
                             )
                         }
                         call.respond(files)
+                    }
+
+                    post("/video/{filename}/star") {
+                        val filename = call.parameters["filename"] ?: run {
+                            call.respond(HttpStatusCode.BadRequest, "Missing filename")
+                            return@post
+                        }
+                        val manager = getRecordingManager() ?: run {
+                            call.respond(HttpStatusCode.ServiceUnavailable, "Camera not ready")
+                            return@post
+                        }
+                        val isNowStarred = manager.toggleStar(filename)
+                        call.respond(mapOf(
+                            "filename" to filename,
+                            "isStarred" to isNowStarred
+                        ))
+                    }
+
+                    delete("/video/{filename}") {
+                        val filename = call.parameters["filename"] ?: run {
+                            call.respond(HttpStatusCode.BadRequest, "Missing filename")
+                            return@delete
+                        }
+                        val manager = getRecordingManager() ?: run {
+                            call.respond(HttpStatusCode.ServiceUnavailable, "Camera not ready")
+                            return@delete
+                        }
+                        if (manager.isStarred(filename)) {
+                            call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Cannot delete starred video"))
+                            return@delete
+                        }
+                        val deleted = manager.deleteVideo(filename)
+                        if (deleted) {
+                            call.respond(mapOf("status" to "deleted", "filename" to filename))
+                        } else {
+                            call.respond(HttpStatusCode.NotFound, mapOf("error" to "Video not found"))
+                        }
                     }
 
                     get("/thumb/{filename}") {
@@ -199,6 +237,12 @@ class VideoServer(
         val bytesAvailable = stat.blockSizeLong * stat.availableBlocksLong
         val gbAvailable = bytesAvailable / (1024f * 1024f * 1024f)
 
+        // Zużycie przez apkę - suma rozmiarów plików w katalogu nagrań
+        val usedBytes = recordingManager?.recordingsDir?.listFiles()
+            ?.filter { it.extension == "mp4" }
+            ?.sumOf { it.length() } ?: 0L
+        val gbUsed = usedBytes / (1024f * 1024f * 1024f)
+
         val isRecording = recordingManager?.isRecording == true
         val state = when {
             recordingManager == null -> "INITIALIZING"
@@ -211,6 +255,7 @@ class VideoServer(
             batteryLevel = batteryPct,
             batteryTemp = batteryTemp,
             storageFreeGb = gbAvailable,
+            storageUsedGb = gbUsed,
             isRecording = isRecording,
             uptimeSeconds = (System.currentTimeMillis() - startTime) / 1000
         )

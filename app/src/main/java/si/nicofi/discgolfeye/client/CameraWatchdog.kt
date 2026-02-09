@@ -56,6 +56,7 @@ class CameraWatchdog(private val context: Context) {
 
     var onStateChanged: ((WatchdogState) -> Unit)? = null
     var onAlert: ((AlertType, String) -> Unit)? = null
+    var onConnectionLost: (() -> Unit)? = null
 
     fun startMonitoring(
         scope: CoroutineScope,
@@ -77,7 +78,11 @@ class CameraWatchdog(private val context: Context) {
                         onStateChanged?.invoke(_state)
                     },
                     onFailure = {
+                        // Reset status przy utracie połączenia
+                        _state = _state.copy(lastStatus = null)
+                        onStateChanged?.invoke(_state)
                         triggerAlert(AlertType.CONNECTION_LOST, "Utracono połączenie z kamerą!")
+                        onConnectionLost?.invoke()
                     }
                 )
 

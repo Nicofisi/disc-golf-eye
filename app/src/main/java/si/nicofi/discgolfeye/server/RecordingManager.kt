@@ -247,7 +247,8 @@ class RecordingManager(private val context: Context) {
     }
 
     private fun cleanupOldFiles() {
-        val files = getVideoFiles()
+        val starred = getStarredFilenames()
+        val files = getVideoFiles().filter { !starred.contains(it.name) }
         if (files.size > MAX_FILES) {
             files.drop(MAX_FILES).forEach { file ->
                 Log.d(TAG, "Deleting old file: ${file.name}")
@@ -291,6 +292,68 @@ class RecordingManager(private val context: Context) {
         val baseName = filename.removeSuffix(".mp4")
         val thumbFile = File(recordingsDir, "$baseName.jpg")
         return if (thumbFile.exists()) thumbFile else null
+    }
+
+    // Starred files management
+    private val starredFile: File by lazy {
+        File(recordingsDir, ".starred")
+    }
+
+    private fun getStarredFilenames(): Set<String> {
+        return try {
+            if (starredFile.exists()) {
+                starredFile.readLines().toSet()
+            } else {
+                emptySet()
+            }
+        } catch (e: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun saveStarredFilenames(filenames: Set<String>) {
+        try {
+            starredFile.writeText(filenames.joinToString("\n"))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save starred files", e)
+        }
+    }
+
+    fun isStarred(filename: String): Boolean {
+        return getStarredFilenames().contains(filename)
+    }
+
+    fun toggleStar(filename: String): Boolean {
+        val starred = getStarredFilenames().toMutableSet()
+        val isNowStarred = if (starred.contains(filename)) {
+            starred.remove(filename)
+            false
+        } else {
+            starred.add(filename)
+            true
+        }
+        saveStarredFilenames(starred)
+        return isNowStarred
+    }
+
+    fun deleteVideo(filename: String): Boolean {
+        // Nie pozwól usunąć starred
+        if (isStarred(filename)) {
+            Log.w(TAG, "Cannot delete starred file: $filename")
+            return false
+        }
+
+        val videoFile = File(recordingsDir, filename)
+        val thumbFile = getThumbnailForVideo(filename)
+
+        var deleted = false
+        if (videoFile.exists()) {
+            deleted = videoFile.delete()
+            Log.d(TAG, "Deleted video: $filename = $deleted")
+        }
+        thumbFile?.delete()
+
+        return deleted
     }
 
     fun release() {

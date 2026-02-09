@@ -18,6 +18,7 @@ data class DeviceStatus(
     val batteryLevel: Int,
     val batteryTemp: Float,
     val storageFreeGb: Float,
+    val storageUsedGb: Float = 0f, // Zużycie przez apkę
     val isRecording: Boolean,
     val uptimeSeconds: Long
 )
@@ -28,5 +29,6 @@ data class VideoFileInfo(
     val timestamp: Long,
     val sizeMb: Float,
     val videoUrl: String,
-    val thumbUrl: String? = null
+    val thumbUrl: String? = null,
+    val isStarred: Boolean = false
 )

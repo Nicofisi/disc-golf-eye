@@ -33,7 +33,8 @@ import si.nicofi.discgolfeye.shared.DeviceStatus
 import si.nicofi.discgolfeye.shared.VideoFileInfo
 import si.nicofi.discgolfeye.ui.components.VideoPlayer
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +71,17 @@ fun ClientScreen(
             watchdog.onStateChanged = { state ->
                 activeAlerts = state.activeAlerts
                 state.lastStatus?.let { serverStatus = it }
+                // Jeśli brak statusu - ustaw null
+                if (state.lastStatus == null) {
+                    serverStatus = null
+                }
+            }
+            watchdog.onConnectionLost = {
+                // Reset przy utracie połączenia
+                connectionStatus = "Utracono połączenie"
+                isConnected = false
+                serverStatus = null
+                videoFiles = emptyList()
             }
             watchdog.startMonitoring(this) {
                 client.getStatus()
@@ -93,9 +105,32 @@ fun ClientScreen(
     // Jeśli wybrano wideo - pokaż odtwarzacz
     if (selectedVideo != null) {
         VideoPlayerScreen(
+            video = selectedVideo!!,
             videoUrl = client.getVideoStreamUrl(selectedVideo!!.filename) ?: "",
-            videoName = selectedVideo!!.filename,
-            onBack = { selectedVideo = null }
+            onBack = { selectedVideo = null },
+            onStar = { filename ->
+                scope.launch {
+                    client.toggleStar(filename).onSuccess { isStarred ->
+                        // Odśwież listę
+                        client.getVideos().onSuccess { videos ->
+                            videoFiles = videos
+                            // Zaktualizuj selectedVideo
+                            selectedVideo = videos.find { it.filename == filename }
+                        }
+                    }
+                }
+            },
+            onDelete = { filename ->
+                scope.launch {
+                    client.deleteVideo(filename).onSuccess {
+                        // Wróć do listy i odśwież
+                        selectedVideo = null
+                        client.getVideos().onSuccess { videos ->
+                            videoFiles = videos
+                        }
+                    }
+                }
+            }
         )
         return
     }
@@ -241,9 +276,14 @@ fun ClientScreen(
                             warning = serverStatus!!.batteryTemp > 42
                         )
                         StatusItem(
-                            label = "Dysk",
-                            value = "${String.format("%.1f", serverStatus!!.storageFreeGb)}GB",
+                            label = "Wolne",
+                            value = "${String.format(Locale.US, "%.1f", serverStatus!!.storageFreeGb)}GB",
                             warning = serverStatus!!.storageFreeGb < 2
+                        )
+                        StatusItem(
+                            label = "Użyte",
+                            value = "${String.format(Locale.US, "%.2f", serverStatus!!.storageUsedGb)}GB",
+                            warning = false
                         )
                         StatusItem(
                             label = "Status",
@@ -457,10 +497,21 @@ private fun VideoItem(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = timeDisplay,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (video.isStarred) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = "Ulubione",
+                            tint = Color(0xFFFFD700), // Złoty
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = timeDisplay,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 Text(
                     text = "${String.format(Locale.US, "%.1f", video.sizeMb)} MB",
                     style = MaterialTheme.typography.bodySmall,
@@ -482,17 +533,20 @@ private fun VideoItem(
 
 @Composable
 private fun VideoPlayerScreen(
+    video: VideoFileInfo,
     videoUrl: String,
-    videoName: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onStar: (String) -> Unit,
+    onDelete: (String) -> Unit
 ) {
     val context = LocalContext.current
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     // Nazwa pliku z datą
-    val downloadFilename = remember(videoName) {
+    val downloadFilename = remember(video.filename) {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd_", Locale.getDefault())
         val date = dateFormat.format(Date())
-        "$date$videoName"
+        "$date${video.filename}"
     }
 
     // Obsługa gestu cofania
@@ -519,11 +573,22 @@ private fun VideoPlayerScreen(
             }
 
             Text(
-                text = videoName,
+                text = video.filename,
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
+
+            // Przycisk Star
+            IconButton(
+                onClick = { onStar(video.filename) }
+            ) {
+                Icon(
+                    if (video.isStarred) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (video.isStarred) "Usuń z ulubionych" else "Dodaj do ulubionych",
+                    tint = if (video.isStarred) Color(0xFFFFD700) else Color.White
+                )
+            }
 
             // Przycisk pobierania
             IconButton(
@@ -538,6 +603,19 @@ private fun VideoPlayerScreen(
                     tint = Color.White
                 )
             }
+
+            // Przycisk Delete (tylko jeśli nie starred)
+            if (!video.isStarred) {
+                IconButton(
+                    onClick = { showDeleteDialog = true }
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Usuń",
+                        tint = Color.Red.copy(alpha = 0.8f)
+                    )
+                }
+            }
         }
 
         // Player
@@ -551,6 +629,32 @@ private fun VideoPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
         }
+    }
+
+    // Dialog potwierdzenia usunięcia
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Usuń nagranie") },
+            text = {
+                Text("Czy na pewno chcesz usunąć ${video.filename}?\n\nTej operacji nie można cofnąć.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete(video.filename)
+                    }
+                ) {
+                    Text("Usuń", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
     }
 }
 

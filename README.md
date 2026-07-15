@@ -1,6 +1,6 @@
 # Disc Golf Eye
 
-**"Where did my disc go?" — an instant-replay black box for disc golf, built from two spare phones.**
+**"Where did my disc go?" — an instant-replay black box for disc golf, built from a spare phone and the one already in your pocket.**
 
 You throw, the disc disappears into rough, trees, or glare, and by the time you walk over you're not sure exactly where it landed. This app turns a spare phone into a hands-free camera you drop in your backpack at the tee — it records continuously and silently — while your main phone, connected over a local Wi-Fi hotspot, lets you pull up a replay of the last minute or two in seconds. No touching the backpack phone, no cloud, no waiting.
 
@@ -48,7 +48,7 @@ Personal project, actively carried around a real course. Not published to the Pl
 ## Building
 
 ```
-git clone <repo URL>
+git clone https://github.com/Nicofisi/disc-golf-eye.git
 cd DiscGolfEye
 ./gradlew assembleDebug
 ```
